@@ -212,32 +212,43 @@ export function PriorityIcon(props: { value: number | Priority; class?: string }
     <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
       <Switch
         fallback={
+          // No priority: three centered dots/dashes
           <>
-            <rect x="1" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
-            <rect x="6" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
-            <rect x="11" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
+            <rect x="2" y="7" width="3" height="2" rx="1" fill="currentColor" opacity="0.4" />
+            <rect x="6.5" y="7" width="3" height="2" rx="1" fill="currentColor" opacity="0.4" />
+            <rect x="11" y="7" width="3" height="2" rx="1" fill="currentColor" opacity="0.4" />
           </>
         }
       >
         <Match when={n() === 1}>
-          <rect x="1" y="8" width="3" height="6" rx="0.5" fill="#ef4444" />
-          <rect x="6" y="5" width="3" height="9" rx="0.5" fill="#ef4444" />
-          <rect x="11" y="2" width="3" height="12" rx="0.5" fill="#ef4444" />
+          {/* Urgent: Exclamation mark in a rounded square */}
+          <rect x="2" y="2" width="12" height="12" rx="2" fill="#ef4444" opacity="0.15" />
+          <path
+            d="M8 5v5"
+            stroke="#ef4444"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle cx="8" cy="12" r="1" fill="#ef4444" />
         </Match>
         <Match when={n() === 2}>
-          <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
-          <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" />
-          <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
+          {/* High: all three bars filled */}
+          <rect x="2" y="9" width="3" height="5" rx="1" fill="currentColor" />
+          <rect x="6.5" y="5" width="3" height="9" rx="1" fill="currentColor" />
+          <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor" />
         </Match>
         <Match when={n() === 3}>
-          <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
-          <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
-          <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
+          {/* Medium: two bars filled */}
+          <rect x="2" y="9" width="3" height="5" rx="1" fill="currentColor" />
+          <rect x="6.5" y="5" width="3" height="9" rx="1" fill="currentColor" />
+          <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.25" />
         </Match>
         <Match when={n() === 4}>
-          <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.3" />
-          <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
-          <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
+          {/* Low: one bar filled */}
+          <rect x="2" y="9" width="3" height="5" rx="1" fill="currentColor" />
+          <rect x="6.5" y="5" width="3" height="9" rx="1" fill="currentColor" opacity="0.25" />
+          <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.25" />
         </Match>
       </Switch>
     </svg>
@@ -254,40 +265,45 @@ export function makePriorityItems(): ComboboxItem[] {
     {
       value: "0",
       label: (
-        <span class="flex items-center gap-2">
-          <PriorityIcon value={0} class="size-3.5 shrink-0" /> No priority
+        <span class="flex items-center gap-3">
+          <PriorityIcon value={0} class="size-4 shrink-0" />
+          <span class="flex-1">No priority</span>
         </span>
       ),
     },
     {
       value: "1",
       label: (
-        <span class="flex items-center gap-2">
-          <PriorityIcon value={1} class="size-3.5 shrink-0" /> Urgent
+        <span class="flex items-center gap-3">
+          <PriorityIcon value={1} class="size-4 shrink-0" />
+          <span class="flex-1">Urgent</span>
         </span>
       ),
     },
     {
       value: "2",
       label: (
-        <span class="flex items-center gap-2">
-          <PriorityIcon value={2} class="size-3.5 shrink-0" /> High
+        <span class="flex items-center gap-3">
+          <PriorityIcon value={2} class="size-4 shrink-0" />
+          <span class="flex-1">High</span>
         </span>
       ),
     },
     {
       value: "3",
       label: (
-        <span class="flex items-center gap-2">
-          <PriorityIcon value={3} class="size-3.5 shrink-0" /> Medium
+        <span class="flex items-center gap-3">
+          <PriorityIcon value={3} class="size-4 shrink-0" />
+          <span class="flex-1">Medium</span>
         </span>
       ),
     },
     {
       value: "4",
       label: (
-        <span class="flex items-center gap-2">
-          <PriorityIcon value={4} class="size-3.5 shrink-0" /> Low
+        <span class="flex items-center gap-3">
+          <PriorityIcon value={4} class="size-4 shrink-0" />
+          <span class="flex-1">Low</span>
         </span>
       ),
     },
@@ -491,12 +507,12 @@ export function SidebarCombobox(props: {
       <PopoverTrigger
         as="button"
         type="button"
-        class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] hover:bg-white/[0.06] transition-colors text-left"
+        class="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[13px] text-muted-foreground hover:bg-white/[0.05] transition-colors text-left group"
       >
         {props.children}
       </PopoverTrigger>
       <PopoverContent
-        class={cn("p-0", props.contentClass)}
+        class={cn("p-0 min-w-[200px]", props.contentClass)}
         onKeyDown={(e: KeyboardEvent) => {
           if (e.key === "Escape") {
             setOpen(false)

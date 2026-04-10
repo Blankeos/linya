@@ -102,10 +102,7 @@ function buildSlashRenderer() {
       currentItems.forEach((item, i) => {
         const row = document.createElement("button")
         row.type = "button"
-        row.className = [
-          "slash-item",
-          i === selectedIndex ? "slash-item--selected" : "",
-        ]
+        row.className = ["slash-item", i === selectedIndex ? "slash-item--selected" : ""]
           .filter(Boolean)
           .join(" ")
 
@@ -232,8 +229,7 @@ function createSlashExtension() {
             if (!q) return SLASH_ITEMS
             return SLASH_ITEMS.filter(
               (item) =>
-                item.title.toLowerCase().includes(q) ||
-                item.keywords.some((k) => k.includes(q)),
+                item.title.toLowerCase().includes(q) || item.keywords.some((k) => k.includes(q))
             )
           },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -279,14 +275,17 @@ const EMPTY_BUBBLE: BubbleMenuState = {
   visible: false,
   x: 0,
   y: 0,
-  formats: { bold: false, italic: false, strike: false, underline: false, code: false, blockquote: false },
+  formats: {
+    bold: false,
+    italic: false,
+    strike: false,
+    underline: false,
+    code: false,
+    blockquote: false,
+  },
 }
 
-function BubbleMenuBar(props: {
-  state: BubbleMenuState
-  editor: Editor
-  onUpdate: () => void
-}) {
+function BubbleMenuBar(props: { state: BubbleMenuState; editor: Editor; onUpdate: () => void }) {
   function btn(label: string, active: boolean, onClick: () => void, title?: string) {
     return (
       <button
@@ -326,14 +325,31 @@ function BubbleMenuBar(props: {
       >
         Aa
         <svg viewBox="0 0 8 5" width="7" height="5" style="margin-left:2px;opacity:0.6">
-          <path d="M0.5 0.5 L4 4 L7.5 0.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path
+            d="M0.5 0.5 L4 4 L7.5 0.5"
+            stroke="currentColor"
+            stroke-width="1.2"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
       </button>
 
       <div class="bubble-divider" />
 
-      {btn("B", props.state.formats.bold, () => props.editor.chain().focus().toggleBold().run(), "Bold")}
-      {btn("I", props.state.formats.italic, () => props.editor.chain().focus().toggleItalic().run(), "Italic")}
+      {btn(
+        "B",
+        props.state.formats.bold,
+        () => props.editor.chain().focus().toggleBold().run(),
+        "Bold"
+      )}
+      {btn(
+        "I",
+        props.state.formats.italic,
+        () => props.editor.chain().focus().toggleItalic().run(),
+        "Italic"
+      )}
 
       <button
         type="button"
@@ -341,7 +357,11 @@ function BubbleMenuBar(props: {
         class="bubble-btn"
         classList={{ "bubble-btn--active": props.state.formats.strike }}
         style={{ "text-decoration": "line-through" }}
-        onMouseDown={(e) => { e.preventDefault(); props.editor.chain().focus().toggleStrike().run(); props.onUpdate() }}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          props.editor.chain().focus().toggleStrike().run()
+          props.onUpdate()
+        }}
       >
         S
       </button>
@@ -352,16 +372,28 @@ function BubbleMenuBar(props: {
         class="bubble-btn"
         classList={{ "bubble-btn--active": props.state.formats.underline }}
         style={{ "text-decoration": "underline" }}
-        onMouseDown={(e) => { e.preventDefault(); props.editor.chain().focus().toggleUnderline().run(); props.onUpdate() }}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          props.editor.chain().focus().toggleUnderline().run()
+          props.onUpdate()
+        }}
       >
         U
       </button>
 
       {/* Link */}
       <button type="button" title="Link" class="bubble-btn" onMouseDown={(e) => e.preventDefault()}>
-        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5L7.5 3.5"/>
-          <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1"/>
+        <svg
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        >
+          <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5L7.5 3.5" />
+          <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
         </svg>
       </button>
 
@@ -371,10 +403,14 @@ function BubbleMenuBar(props: {
         title="Blockquote"
         class="bubble-btn"
         classList={{ "bubble-btn--active": props.state.formats.blockquote }}
-        onMouseDown={(e) => { e.preventDefault(); props.editor.chain().focus().toggleBlockquote().run(); props.onUpdate() }}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          props.editor.chain().focus().toggleBlockquote().run()
+          props.onUpdate()
+        }}
       >
         <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor">
-          <path d="M3 4.5C3 4.5 2 6 2 7.5C2 8.9 2.9 9.5 3.5 9.5C4.3 9.5 5 8.8 5 8C5 7.2 4.3 6.5 3.5 6.5L4.5 4.5H3ZM9 4.5C9 4.5 8 6 8 7.5C8 8.9 8.9 9.5 9.5 9.5C10.3 9.5 11 8.8 11 8C11 7.2 10.3 6.5 9.5 6.5L10.5 4.5H9Z"/>
+          <path d="M3 4.5C3 4.5 2 6 2 7.5C2 8.9 2.9 9.5 3.5 9.5C4.3 9.5 5 8.8 5 8C5 7.2 4.3 6.5 3.5 6.5L4.5 4.5H3ZM9 4.5C9 4.5 8 6 8 7.5C8 8.9 8.9 9.5 9.5 9.5C10.3 9.5 11 8.8 11 8C11 7.2 10.3 6.5 9.5 6.5L10.5 4.5H9Z" />
         </svg>
       </button>
 
@@ -385,10 +421,22 @@ function BubbleMenuBar(props: {
         type="button"
         title="Clear formatting"
         class="bubble-btn"
-        onMouseDown={(e) => { e.preventDefault(); props.editor.chain().focus().unsetAllMarks().run(); props.onUpdate() }}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          props.editor.chain().focus().unsetAllMarks().run()
+          props.onUpdate()
+        }}
       >
-        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <path d="M3 3 L13 13 M13 3 L3 13"/>
+        <svg
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        >
+          <path d="M3 3 L13 13 M13 3 L3 13" />
         </svg>
       </button>
 
@@ -397,7 +445,7 @@ function BubbleMenuBar(props: {
         "</>",
         props.state.formats.code,
         () => props.editor.chain().focus().toggleCode().run(),
-        "Inline code",
+        "Inline code"
       )}
 
       {/* Code block */}
@@ -405,12 +453,25 @@ function BubbleMenuBar(props: {
         type="button"
         title="Code block"
         class="bubble-btn"
-        onMouseDown={(e) => { e.preventDefault(); props.editor.chain().focus().toggleCodeBlock().run(); props.onUpdate() }}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          props.editor.chain().focus().toggleCodeBlock().run()
+          props.onUpdate()
+        }}
       >
-        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1.5" y="3" width="13" height="10" rx="1.5"/>
-          <path d="M5.5 6.5 L3.5 8 L5.5 9.5"/>
-          <path d="M10.5 6.5 L12.5 8 L10.5 9.5"/>
+        <svg
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect x="1.5" y="3" width="13" height="10" rx="1.5" />
+          <path d="M5.5 6.5 L3.5 8 L5.5 9.5" />
+          <path d="M10.5 6.5 L12.5 8 L10.5 9.5" />
         </svg>
       </button>
     </div>
@@ -450,11 +511,23 @@ function markdownToHtml(text: string): string {
 
     // Headings
     const h3 = line.match(/^### (.+)/)
-    if (h3) { out.push(`<h3>${applyInlineMarkdown(h3[1])}</h3>`); i++; continue }
+    if (h3) {
+      out.push(`<h3>${applyInlineMarkdown(h3[1])}</h3>`)
+      i++
+      continue
+    }
     const h2 = line.match(/^## (.+)/)
-    if (h2) { out.push(`<h2>${applyInlineMarkdown(h2[1])}</h2>`); i++; continue }
+    if (h2) {
+      out.push(`<h2>${applyInlineMarkdown(h2[1])}</h2>`)
+      i++
+      continue
+    }
     const h1 = line.match(/^# (.+)/)
-    if (h1) { out.push(`<h1>${applyInlineMarkdown(h1[1])}</h1>`); i++; continue }
+    if (h1) {
+      out.push(`<h1>${applyInlineMarkdown(h1[1])}</h1>`)
+      i++
+      continue
+    }
 
     // Blockquote
     if (line.startsWith("> ")) {
@@ -513,6 +586,7 @@ interface TiptapEditorProps {
   editorClass?: string
   /** "default" = bare editor (descriptions), "comment" = boxed with bg (comments) */
   variant?: "default" | "comment"
+  ref?: (getEditor: () => Editor | undefined) => void
 }
 
 export default function TiptapEditor(props: TiptapEditorProps) {
@@ -598,6 +672,8 @@ export default function TiptapEditor(props: TiptapEditorProps) {
         }, 150)
       },
     })
+
+    props.ref?.(() => editorInstance)
   })
 
   onCleanup(() => {

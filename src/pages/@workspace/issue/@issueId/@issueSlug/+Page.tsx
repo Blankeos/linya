@@ -4,6 +4,7 @@ import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
 import TiptapEditor from "@/components/tiptap-editor"
 import { usePowerSyncQuery, usePowerSyncExecute } from "@/lib/powersync"
+import { useAuthContext } from "@/context/auth.context"
 import {
   IconChevronDown,
   IconPerson,
@@ -11,6 +12,7 @@ import {
   IconProjects,
   IconCheck,
   IconInfo,
+  IconUserCircleDashed,
 } from "@/assets/icons"
 import { type ComboboxItem } from "@/components/ui/combobox-2"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -18,6 +20,7 @@ import { cn } from "@/utils/cn"
 import { Tippy } from "@/lib/solid-tippy"
 import { useHotkeys } from "bagon-hooks"
 import { toast } from "solid-sonner"
+import { Kbd } from "@/components/ui/kbd"
 import {
   makePriorityItems,
   makeStatusItems,
@@ -25,6 +28,7 @@ import {
   PriorityIcon,
   SidebarCombobox,
   StatusIcon,
+  StatusBadge,
   type Priority,
 } from "@/components/issue-fields"
 
@@ -135,6 +139,8 @@ function parseIssueId(issueId: string): { teamIdentifier: string; number: number
 }
 
 export default function IssueDetailPage() {
+  const auth = useAuthContext()
+  const currentUser = () => auth.user()
   const pageCtx = usePageContext()
   const params = () => pageCtx.routeParams as Record<string, string>
   const workspaceSlug = () => params().workspace ?? ""
@@ -261,6 +267,9 @@ export default function IssueDetailPage() {
     }, 300)
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let descriptionEditorRef: any = undefined
+
   const [comment, setComment] = createSignal("")
   const [copied, setCopied] = createSignal(false)
 
@@ -349,7 +358,10 @@ export default function IssueDetailPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
-                      e.currentTarget.blur()
+                      const editor = descriptionEditorRef?.()
+                      if (editor) {
+                        editor.commands.focus("end")
+                      }
                     }
                   }}
                   onInput={(e) => {
@@ -365,6 +377,9 @@ export default function IssueDetailPage() {
 
                 <div class="mb-8">
                   <TiptapEditor
+                    ref={(getEditor) => {
+                      descriptionEditorRef = getEditor
+                    }}
                     content={iss().description_html ?? iss().description ?? ""}
                     placeholder="Add description… (type / for commands)"
                     editorClass="min-h-[120px]"
@@ -404,9 +419,20 @@ export default function IssueDetailPage() {
                     </For>
                   </div>
                   <div class="flex gap-3">
-                    <div class="size-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <span class="text-[10px] font-medium text-primary">?</span>
-                    </div>
+                    <Show
+                      when={currentUser()?.display_name}
+                      fallback={
+                        <div class="size-6 flex items-center justify-center shrink-0 mt-0.5">
+                          <IconUserCircleDashed class="size-6 text-muted-foreground" />
+                        </div>
+                      }
+                    >
+                      <div class="size-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <span class="text-[10px] font-medium text-primary">
+                          {currentUser()!.display_name?.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    </Show>
                     <div class="flex-1">
                       <TiptapEditor
                         variant="comment"
@@ -577,9 +603,11 @@ function IssueSidebar(props: IssueSidebarProps) {
     }
   }
 
+  const UNASSIGNED = "__none__"
+
   const assigneeItems = (): ComboboxItem[] => [
     {
-      value: "",
+      value: UNASSIGNED,
       label: (
         <span class="flex items-center gap-2">
           <div class="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/50">
@@ -624,7 +652,14 @@ function IssueSidebar(props: IssueSidebarProps) {
       {/* Action icon buttons */}
       <div class="flex items-center justify-end gap-1 px-0.5 pt-0.5">
         {/* Copy issue URL */}
-        <Tippy content="Copy issue URL  ⌘⇧," props={{ placement: "bottom" }}>
+        <Tippy
+          content={
+            <span class="flex items-center gap-2">
+              Copy issue URL <Kbd>⌘ ⇧ ,</Kbd>
+            </span>
+          }
+          props={{ placement: "bottom" }}
+        >
           <button
             type="button"
             onClick={() =>
@@ -643,7 +678,14 @@ function IssueSidebar(props: IssueSidebarProps) {
         </Tippy>
 
         {/* Copy issue ID */}
-        <Tippy content="Copy issue ID  ⌘." props={{ placement: "bottom" }}>
+        <Tippy
+          content={
+            <span class="flex items-center gap-2">
+              Copy issue ID <Kbd>⌘ .</Kbd>
+            </span>
+          }
+          props={{ placement: "bottom" }}
+        >
           <button
             type="button"
             onClick={copyIssueId}
@@ -656,7 +698,14 @@ function IssueSidebar(props: IssueSidebarProps) {
         </Tippy>
 
         {/* Copy git branch name */}
-        <Tippy content="Copy git branch name  ⌘⇧." props={{ placement: "bottom" }}>
+        <Tippy
+          content={
+            <span class="flex items-center gap-2">
+              Copy git branch name <Kbd>⌘ ⇧ .</Kbd>
+            </span>
+          }
+          props={{ placement: "bottom" }}
+        >
           <button
             type="button"
             onClick={copyBranchName}
@@ -670,7 +719,14 @@ function IssueSidebar(props: IssueSidebarProps) {
 
         {/* Copy as prompt (with chevron dropdown) */}
         <div class="flex items-center rounded-full bg-white/[0.05] overflow-hidden">
-          <Tippy content="Copy as prompt  ⌘⌥P" props={{ placement: "bottom" }}>
+          <Tippy
+            content={
+              <span class="flex items-center gap-2">
+                Copy as prompt <Kbd>⌘ ⌥ P</Kbd>
+              </span>
+            }
+            props={{ placement: "bottom" }}
+          >
             <button
               type="button"
               onClick={() => flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")}
@@ -737,12 +793,14 @@ function IssueSidebar(props: IssueSidebarProps) {
               searchPlaceholder="Search status..."
               contentClass="w-56"
             >
-              <StatusIcon
-                category={currentStatus()?.category ?? null}
-                class="size-[15px] shrink-0"
-              />
-              <span class="font-medium text-foreground">
-                {currentStatus()?.name ?? "No status"}
+              <span class="flex items-center gap-2.5 flex-1">
+                <StatusIcon
+                  category={currentStatus()?.category ?? null}
+                  class="size-[15px] shrink-0"
+                />
+                <span class="font-medium text-foreground">
+                  {currentStatus()?.name ?? "No status"}
+                </span>
               </span>
             </SidebarCombobox>
 
@@ -751,42 +809,53 @@ function IssueSidebar(props: IssueSidebarProps) {
               items={priorityItems()}
               selectedValue={(props.issue?.priority ?? 0).toString()}
               onSelect={(v) => props.onPriorityChange(parseInt(v as string, 10))}
-              searchPlaceholder="Search priority..."
-              contentClass="w-52"
+              searchPlaceholder="Set priority to..."
+              contentClass="w-48"
             >
-              <PriorityIcon value={props.issue?.priority ?? 0} class="size-3.5 shrink-0" />
-              <span
-                class={cn(
-                  currentPriority() === "none"
-                    ? "text-muted-foreground"
-                    : "font-medium text-foreground"
-                )}
-              >
-                {currentPriority() === "none"
-                  ? "Set priority"
-                  : currentPriority().charAt(0).toUpperCase() + currentPriority().slice(1)}
+              <span class="flex items-center gap-2.5 flex-1">
+                <PriorityIcon value={props.issue?.priority ?? 0} class="size-4 shrink-0" />
+                <span
+                  class={cn(
+                    currentPriority() === "none" ? "text-muted-foreground" : "text-foreground"
+                  )}
+                >
+                  {currentPriority() === "none"
+                    ? "Set priority"
+                    : currentPriority().charAt(0).toUpperCase() + currentPriority().slice(1)}
+                </span>
               </span>
             </SidebarCombobox>
 
             {/* Assignee */}
             <SidebarCombobox
               items={assigneeItems()}
-              selectedValue={iss.assignee_id || ""}
-              onSelect={(v) => props.onAssigneeChange((v as string) || null)}
+              selectedValue={iss.assignee_id || UNASSIGNED}
+              onSelect={(v) => props.onAssigneeChange(v === UNASSIGNED ? null : (v as string))}
               searchPlaceholder="Assign to..."
               contentClass="w-56"
             >
-              <div class="size-[15px] rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <span class="text-[8px] font-medium text-primary">
-                  {iss.assignee_name ? iss.assignee_name.charAt(0).toUpperCase() : "?"}
+              <span class="flex items-center gap-2.5 flex-1">
+                <Show
+                  when={iss.assignee_name}
+                  fallback={
+                    <div class="size-[15px] flex items-center justify-center shrink-0">
+                      <IconUserCircleDashed class="size-4 text-muted-foreground" />
+                    </div>
+                  }
+                >
+                  <div class="size-[15px] rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                    <span class="text-[8px] font-medium text-primary">
+                      {iss.assignee_name!.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                </Show>
+                <span
+                  class={cn(
+                    iss.assignee_name ? "font-medium text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  {iss.assignee_name ?? "Assign"}
                 </span>
-              </div>
-              <span
-                class={cn(
-                  iss.assignee_name ? "font-medium text-foreground" : "text-muted-foreground"
-                )}
-              >
-                {iss.assignee_name ?? "Assign"}
               </span>
             </SidebarCombobox>
           </div>
@@ -886,25 +955,6 @@ function IssueSidebar(props: IssueSidebarProps) {
         </div>
       </div>
     </div>
-  )
-}
-
-function StatusBadge(props: { category: StatusCategory | null; name: string | null }) {
-  const config: Record<string, { color: string; bg: string }> = {
-    backlog: { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
-    unstarted: { color: "#9ca3af", bg: "rgba(156,163,175,0.12)" },
-    started: { color: "#f97316", bg: "rgba(249,115,22,0.12)" },
-    completed: { color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
-    cancelled: { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
-  }
-  const c = () => config[props.category ?? "backlog"] ?? config.backlog
-  return (
-    <span
-      class="text-[11px] px-2 py-0.5 rounded-full font-medium"
-      style={{ color: c().color, "background-color": c().bg }}
-    >
-      {props.name ?? props.category ?? "No status"}
-    </span>
   )
 }
 

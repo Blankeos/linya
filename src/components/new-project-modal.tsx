@@ -1,29 +1,25 @@
 import { createEffect, createSignal, Show } from "solid-js"
-import { IconCalendar, IconMembers, IconPerson, IconPlus, IconProjects, IconX } from "@/assets/icons"
-import { type ComboboxItem } from "@/components/ui/combobox-2"
+import {
+  IconCalendar,
+  IconMembers,
+  IconPerson,
+  IconPlus,
+  IconProjects,
+  IconX,
+} from "@/assets/icons"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { honoClient } from "@/lib/hono-client"
 import {
   makePriorityItems,
+  makeProjectStatusItems,
   PRIORITY_LABELS,
   PriorityIcon,
+  ProjectStatusIcon,
+  PROJECT_STATUSES,
   ToolbarCombobox,
+  type ProjectStatus,
 } from "@/components/issue-fields"
 import * as DialogPrimitive from "@kobalte/core/dialog"
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type ProjectStatus = "backlog" | "planned" | "in_progress" | "completed" | "canceled"
-
-const PROJECT_STATUSES: { value: ProjectStatus; label: string; color: string }[] = [
-  { value: "backlog", label: "Backlog", color: "#6b7280" },
-  { value: "planned", label: "Planned", color: "#3b82f6" },
-  { value: "in_progress", label: "In Progress", color: "#f59e0b" },
-  { value: "completed", label: "Completed", color: "#22c55e" },
-  { value: "canceled", label: "Canceled", color: "#ef4444" },
-]
 
 // ---------------------------------------------------------------------------
 // Component
@@ -72,7 +68,9 @@ export function NewProjectModal(props: {
       if (!workspace) return
       setWorkspaceId(workspace.id)
       // Use the slug uppercased as identifier if no explicit identifier field
-      setWorkspaceIdentifier((workspace.identifier ?? props.workspaceSlug).toUpperCase().slice(0, 4))
+      setWorkspaceIdentifier(
+        (workspace.identifier ?? props.workspaceSlug).toUpperCase().slice(0, 4)
+      )
       setDataLoaded(true)
     } catch {}
   }
@@ -113,16 +111,7 @@ export function NewProjectModal(props: {
 
   const currentStatus = () => PROJECT_STATUSES.find((s) => s.value === status())!
 
-  const statusItems = (): ComboboxItem[] =>
-    PROJECT_STATUSES.map((s) => ({
-      value: s.value,
-      label: (
-        <span class="flex items-center gap-2">
-          <ProjectStatusIcon status={s.value} color={s.color} class="size-3.5 shrink-0" />
-          {s.label}
-        </span>
-      ),
-    }))
+  const statusItems = makeProjectStatusItems
 
   return (
     <Dialog
@@ -231,10 +220,10 @@ export function NewProjectModal(props: {
                   items={makePriorityItems()}
                   value={priority()}
                   onValueChange={(v) => setPriority(v as string)}
-                  searchPlaceholder="Search priority..."
+                  searchPlaceholder="Set priority to..."
                   contentClass="w-44"
                 >
-                  <PriorityIcon value={parseInt(priority())} class="size-3.5 shrink-0" />
+                  <PriorityIcon value={parseInt(priority())} class="size-4 shrink-0" />
                   <span>{PRIORITY_LABELS[parseInt(priority())]}</span>
                 </ToolbarCombobox>
 
@@ -345,85 +334,6 @@ export function NewProjectModal(props: {
 // ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
-
-function ProjectStatusIcon(props: {
-  status: ProjectStatus
-  color: string | null
-  class?: string
-}) {
-  const color = props.color ?? "#6b7280"
-
-  switch (props.status) {
-    case "backlog":
-      return (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={color}
-          stroke-width="2"
-          class={props.class}
-        >
-          <rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2" />
-        </svg>
-      )
-    case "planned":
-      return (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={color}
-          stroke-width="2"
-          class={props.class}
-        >
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="4" fill={color} />
-        </svg>
-      )
-    case "in_progress":
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class}>
-          <circle cx="12" cy="12" r="9" fill={color} opacity="0.2" />
-          <path
-            d="M12 3 A9 9 0 0 1 21 12"
-            stroke={color}
-            stroke-width="2"
-            stroke-linecap="round"
-            fill="none"
-          />
-        </svg>
-      )
-    case "completed":
-      return (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill={color}
-          class={props.class}
-        >
-          <circle cx="12" cy="12" r="9" opacity="0.2" />
-          <circle cx="12" cy="12" r="9" fill="none" stroke={color} stroke-width="2" />
-          <polyline
-            points="7 12 10.5 15.5 17 9"
-            fill="none"
-            stroke={color}
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      )
-    case "canceled":
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class}>
-          <circle cx="12" cy="12" r="9" stroke={color} stroke-width="2" opacity="0.5" />
-          <line x1="8" y1="8" x2="16" y2="16" stroke={color} stroke-width="2" stroke-linecap="round" />
-          <line x1="16" y1="8" x2="8" y2="16" stroke={color} stroke-width="2" stroke-linecap="round" />
-        </svg>
-      )
-  }
-}
 
 function TargetDateIcon(props: { class?: string }) {
   return (

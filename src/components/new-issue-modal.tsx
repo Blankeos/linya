@@ -36,7 +36,6 @@ import {
 
 type Team = { id: string; name: string; identifier: string }
 
-
 export function NewIssueModal(props: {
   open: boolean
   onClose: () => void
@@ -267,7 +266,11 @@ export function NewIssueModal(props: {
               contentClass="w-48"
               disallowEmptySelection
             >
-              <StatusIcon category={selectedStatus()?.category} color={selectedStatus()?.color} class="size-3.5" />
+              <StatusIcon
+                category={selectedStatus()?.category}
+                color={selectedStatus()?.color}
+                class="size-3.5"
+              />
               <span>{selectedStatus()?.name ?? "Status"}</span>
             </ToolbarCombobox>
 
@@ -278,10 +281,10 @@ export function NewIssueModal(props: {
               items={makePriorityItems()}
               value={priority()}
               onValueChange={(v) => setPriority(v as string)}
-              searchPlaceholder="Search priority..."
+              searchPlaceholder="Set priority to..."
               contentClass="w-44"
             >
-              <PriorityIcon value={parseInt(priority())} class="size-3.5 shrink-0" />
+              <PriorityIcon value={parseInt(priority())} class="size-4 shrink-0" />
               <span>{PRIORITY_LABELS[parseInt(priority())]}</span>
             </ToolbarCombobox>
 
@@ -398,4 +401,3 @@ export function NewIssueModal(props: {
     </Dialog>
   )
 }
-

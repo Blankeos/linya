@@ -100,23 +100,23 @@ export const Combobox2Command: Component<Combobox2CommandProps> = (props) => {
                 onSelect={(value) => {
                   handleValueChange(value)
                 }}
+                class="flex items-center justify-between gap-2 px-3 py-2"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  class={cn(
-                    "mr-2 h-4 w-4",
-                    isItemSelected(item.value) ? "opacity-100" : "opacity-0"
-                  )}
-                >
-                  <path d="M5 12l5 5l10 -10" />
-                </svg>
                 {item.label}
+                <Show when={isItemSelected(item.value)} fallback={<span class="w-4" />}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-4 w-4 shrink-0 text-foreground"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </Show>
               </CommandItem>
             )}
           </For>
