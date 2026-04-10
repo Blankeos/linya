@@ -1,0 +1,17 @@
+model Cycle {
+  id         String   @id @default(cuid())
+  team_id    String
+  number     Int      // auto-increment per team
+  name       String?
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  is_active  Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  team   Team    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  issues Issue[]
+
+  @@unique([team_id, number])
+  @@map("cycle")
+}

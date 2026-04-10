@@ -13,8 +13,28 @@ export type { PageRoute, UseParamsResult };
 
 const pageRoutes = [
   "/",
-  "/dashboard",
-  "/dashboard/settings"
+  "/@workspace/customers",
+  "/@workspace/drafts",
+  "/@workspace/inbox",
+  "/@workspace/initiatives",
+  "/@workspace/members",
+  "/@workspace/my-issues",
+  "/@workspace/project/@projectSlug/issues",
+  "/@workspace/project/@projectSlug/overview",
+  "/@workspace/projects/all",
+  "/@workspace/pulse/following",
+  "/@workspace/settings",
+  "/@workspace/team/@teamIdentifier/backlog",
+  "/@workspace/team/@teamIdentifier/cycles",
+  "/@workspace/team/@teamIdentifier/issues",
+  "/@workspace/team/@teamIdentifier/issues/@issueId",
+  "/@workspace/teams",
+  "/@workspace/view/@viewSlug",
+  "/@workspace/views/issues",
+  "/forgot-password/verify",
+  "/login",
+  "/onboarding",
+  "/signup"
 ] as const;
 
 type PageRoute = typeof pageRoutes[number];

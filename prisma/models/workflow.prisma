@@ -1,0 +1,15 @@
+model WorkflowStatus {
+  id         String   @id @default(cuid())
+  team_id    String
+  name       String
+  color      String
+  category   String   // 'backlog', 'unstarted', 'started', 'completed', 'cancelled'
+  position   Float    // fractional indexing
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  team   Team    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  issues Issue[]
+
+  @@map("workflow_status")
+}

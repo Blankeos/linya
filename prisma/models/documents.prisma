@@ -1,0 +1,19 @@
+model Document {
+  id           String   @id @default(cuid())
+  workspace_id String
+  project_id   String?
+  creator_id   String
+  title        String
+  content      String?  // markdown / rich text JSON
+  content_html String?
+  icon         String?
+  sort_order   Float
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  creator   User      @relation("DocumentCreator", fields: [creator_id], references: [id])
+
+  @@map("document")
+}

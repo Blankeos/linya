@@ -1,0 +1,13 @@
+model IssueTemplate {
+  id            String   @id @default(cuid())
+  team_id       String
+  name          String
+  description   String?
+  template_data Json     // { title, description, priority, labels, etc. }
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  team Team @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@map("issue_template")
+}

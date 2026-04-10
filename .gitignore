@@ -27,3 +27,4 @@ dist-ssr
 
 .claude/settings.local.json
 _tmp_*
+docker/volumes/

@@ -1,0 +1,79 @@
+model Project {
+  id           String    @id @default(cuid())
+  workspace_id String
+  name         String
+  description  String?
+  icon         String?
+  color        String?
+  status       String    @default("planned") // 'backlog','planned','in_progress','paused','completed','cancelled'
+  lead_id      String?
+  start_date   DateTime? @db.Date
+  target_date  DateTime? @db.Date
+  sort_order   Float
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  lead        User?            @relation("ProjectLead", fields: [lead_id], references: [id])
+  members     ProjectMember[]
+  teams       ProjectTeam[]
+  milestones  ProjectMilestone[]
+  updates     ProjectUpdate[]
+  issues      Issue[]
+  documents   Document[]
+  initiative_projects InitiativeProject[]
+
+  @@map("project")
+}
+
+model ProjectMember {
+  id         String @id @default(cuid())
+  project_id String
+  user_id    String
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, user_id])
+  @@map("project_member")
+}
+
+model ProjectTeam {
+  id         String @id @default(cuid())
+  project_id String
+  team_id    String
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, team_id])
+  @@map("project_team")
+}
+
+model ProjectMilestone {
+  id          String    @id @default(cuid())
+  project_id  String
+  name        String
+  description String?
+  target_date DateTime? @db.Date
+  sort_order  Float
+  created_at  DateTime  @default(now())
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@map("project_milestone")
+}
+
+model ProjectUpdate {
+  id         String   @id @default(cuid())
+  project_id String
+  user_id    String
+  body       String
+  health     String   @default("on_track") // 'on_track', 'at_risk', 'off_track'
+  created_at DateTime @default(now())
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@map("project_update")
+}

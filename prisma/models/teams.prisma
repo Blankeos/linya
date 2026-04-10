@@ -1,0 +1,43 @@
+model Team {
+  id            String   @id @default(cuid())
+  workspace_id  String
+  name          String
+  identifier    String   // e.g., 'ENG', 'DES'
+  description   String?
+  icon          String?
+  color         String?
+  is_private    Boolean  @default(false)
+  timezone      String?  @default("UTC")
+  parent_team_id String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  parent_team Team?        @relation("SubTeams", fields: [parent_team_id], references: [id])
+  sub_teams   Team[]       @relation("SubTeams")
+  members     TeamMember[]
+  workflow_statuses WorkflowStatus[]
+  labels      Label[]
+  issues      Issue[]
+  cycles      Cycle[]
+  issue_templates IssueTemplate[]
+  custom_views CustomView[]
+  project_teams ProjectTeam[]
+
+  @@unique([workspace_id, identifier])
+  @@map("team")
+}
+
+model TeamMember {
+  id         String   @id @default(cuid())
+  team_id    String
+  user_id    String
+  role       String   @default("member") // 'owner', 'member'
+  created_at DateTime @default(now())
+
+  team Team @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([team_id, user_id])
+  @@map("team_member")
+}

@@ -1,0 +1,16 @@
+model SidebarItem {
+  id           String   @id @default(cuid())
+  user_id      String
+  workspace_id String
+  section      String   // 'favorites', 'teams', etc.
+  target_type  String
+  target_id    String
+  sort_order   Float
+  is_collapsed Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("sidebar_item")
+}

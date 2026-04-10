@@ -1,0 +1,34 @@
+model Integration {
+  id            String   @id @default(cuid())
+  workspace_id  String
+  type          String   // 'github', 'slack'
+  config        Json     @default("{}")
+  access_token  String?
+  refresh_token String?
+  enabled       Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  workspace    Workspace         @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  github_links GithubIssueLink[]
+
+  @@map("integration")
+}
+
+model GithubIssueLink {
+  id                   String   @id @default(cuid())
+  issue_id             String
+  integration_id       String
+  github_repo          String
+  github_pr_number     Int?
+  github_issue_number  Int?
+  github_branch        String?
+  status               String?  // 'open', 'merged', 'closed'
+  created_at           DateTime @default(now())
+  updated_at           DateTime @default(now()) @updatedAt
+
+  issue       Issue       @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integration_id], references: [id], onDelete: Cascade)
+
+  @@map("github_issue_link")
+}

@@ -1,0 +1,14 @@
+model Favorite {
+  id           String   @id @default(cuid())
+  user_id      String
+  workspace_id String
+  target_type  String   // 'view', 'project', 'team', 'cycle', 'issue'
+  target_id    String
+  sort_order   Float
+  created_at   DateTime @default(now())
+
+  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("favorite")
+}

@@ -1,0 +1,18 @@
+model Label {
+  id              String   @id @default(cuid())
+  workspace_id    String?
+  team_id         String?  // null = workspace-level
+  name            String
+  color           String
+  description     String?
+  parent_label_id String?
+  created_at      DateTime @default(now())
+
+  workspace    Workspace?   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  team         Team?        @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  parent_label Label?       @relation("LabelGroup", fields: [parent_label_id], references: [id])
+  child_labels Label[]      @relation("LabelGroup")
+  issue_labels IssueLabel[]
+
+  @@map("label")
+}

@@ -1,0 +1,86 @@
+model Issue {
+  id               String    @id @default(cuid())
+  team_id          String
+  number           Int       // auto-increment per team (server-assigned)
+  title            String
+  description      String?   // markdown/prosemirror JSON
+  description_html String?   // rendered HTML cache
+  status_id        String
+  priority         Int       @default(0) // 0=none,1=urgent,2=high,3=medium,4=low
+  assignee_id      String?
+  creator_id       String
+  project_id       String?
+  cycle_id         String?
+  parent_issue_id  String?   // sub-issues
+  estimate         Float?    // story points / t-shirt sizes
+  due_date         DateTime? @db.Date
+  sort_order       Float     // fractional indexing
+  is_triaged       Boolean   @default(false)
+  snoozed_until    DateTime?
+  started_at       DateTime?
+  completed_at     DateTime?
+  cancelled_at     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  team         Team           @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  status       WorkflowStatus @relation(fields: [status_id], references: [id])
+  assignee     User?          @relation("IssueAssignee", fields: [assignee_id], references: [id])
+  creator      User           @relation("IssueCreator", fields: [creator_id], references: [id])
+  project      Project?       @relation(fields: [project_id], references: [id])
+  cycle        Cycle?         @relation(fields: [cycle_id], references: [id])
+  parent_issue Issue?         @relation("SubIssues", fields: [parent_issue_id], references: [id])
+  sub_issues   Issue[]        @relation("SubIssues")
+
+  labels      IssueLabel[]
+  relations   IssueRelation[]  @relation("IssueRelations")
+  related_by  IssueRelation[]  @relation("RelatedIssueRelations")
+  subscribers IssueSubscriber[]
+  comments    Comment[]
+  reactions   Reaction[]
+  history     IssueHistory[]
+  attachments Attachment[]
+  customer_requests CustomerRequest[]
+  notifications Notification[]
+  github_links  GithubIssueLink[]
+
+  @@unique([team_id, number])
+  @@map("issue")
+}
+
+model IssueLabel {
+  id       String @id @default(cuid())
+  issue_id String
+  label_id String
+
+  issue Issue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [label_id], references: [id], onDelete: Cascade)
+
+  @@unique([issue_id, label_id])
+  @@map("issue_label")
+}
+
+model IssueRelation {
+  id               String   @id @default(cuid())
+  issue_id         String
+  related_issue_id String
+  type             String   // 'blocks', 'blocked_by', 'relates_to', 'duplicate_of'
+  created_at       DateTime @default(now())
+
+  issue         Issue @relation("IssueRelations", fields: [issue_id], references: [id], onDelete: Cascade)
+  related_issue Issue @relation("RelatedIssueRelations", fields: [related_issue_id], references: [id], onDelete: Cascade)
+
+  @@map("issue_relation")
+}
+
+model IssueSubscriber {
+  id       String @id @default(cuid())
+  issue_id String
+  user_id  String
+
+  issue Issue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([issue_id, user_id])
+  @@map("issue_subscriber")
+}

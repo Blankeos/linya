@@ -1,0 +1,22 @@
+model Notification {
+  id            String    @id @default(cuid())
+  user_id       String
+  workspace_id  String
+  type          String    // 'issue_assigned', 'issue_mentioned', 'comment', 'status_change', etc.
+  issue_id      String?
+  comment_id    String?
+  actor_id      String?
+  data          Json?
+  read_at       DateTime?
+  archived_at   DateTime?
+  snoozed_until DateTime?
+  created_at    DateTime  @default(now())
+
+  user      User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  issue     Issue?     @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  comment   Comment?   @relation(fields: [comment_id], references: [id], onDelete: SetNull)
+  actor     User?      @relation("NotificationActor", fields: [actor_id], references: [id])
+
+  @@map("notification")
+}

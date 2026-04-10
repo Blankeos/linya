@@ -1,0 +1,18 @@
+model Attachment {
+  id           String   @id @default(cuid())
+  issue_id     String?
+  comment_id   String?
+  uploader_id  String
+  filename     String
+  content_type String
+  size_bytes   BigInt
+  storage_key  String   // S3 key or filesystem path
+  storage_type String   @default("filesystem") // 'filesystem' or 's3'
+  created_at   DateTime @default(now())
+
+  issue    Issue?   @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  comment  Comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  uploader User     @relation("AttachmentUploader", fields: [uploader_id], references: [id])
+
+  @@map("attachment")
+}

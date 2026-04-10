@@ -1,0 +1,30 @@
+model Customer {
+  id           String   @id @default(cuid())
+  workspace_id String
+  name         String
+  email        String?
+  domain       String?
+  external_id  String?
+  metadata     Json?    @default("{}")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  workspace Workspace       @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  requests  CustomerRequest[]
+
+  @@map("customer")
+}
+
+model CustomerRequest {
+  id          String   @id @default(cuid())
+  customer_id String
+  issue_id    String
+  body        String?
+  source      String?  // 'slack', 'email', 'manual'
+  created_at  DateTime @default(now())
+
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  issue    Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+
+  @@map("customer_request")
+}

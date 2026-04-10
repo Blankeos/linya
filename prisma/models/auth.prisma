@@ -1,0 +1,111 @@
+model User {
+  id             String  @id
+  email          String  @unique
+  email_verified Boolean @default(false)
+  password_hash  String
+  display_name   String  @default("")
+  avatar_url     String?
+  metadata       Json?
+
+  joined_at  DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  refresh_tokens    RefreshToken[]
+  oauth_accounts    OAuthAccount[]
+  passkeys          Passkey[]
+  workspace_members WorkspaceMember[]
+  owned_workspaces  Workspace[]       @relation("WorkspaceOwner")
+  team_members      TeamMember[]
+
+  // Issue relations
+  assigned_issues   Issue[]           @relation("IssueAssignee")
+  created_issues    Issue[]           @relation("IssueCreator")
+  issue_subscribers IssueSubscriber[]
+  issue_history     IssueHistory[]
+
+  // Comment relations
+  comments     Comment[]
+  reactions    Reaction[]
+
+  // Project relations
+  led_projects    Project[]       @relation("ProjectLead")
+  project_members ProjectMember[]
+  project_updates ProjectUpdate[]
+
+  // Initiative relations
+  owned_initiatives Initiative[] @relation("InitiativeOwner")
+
+  // View relations
+  created_views CustomView[] @relation("CustomViewCreator")
+
+  // Document relations
+  created_documents Document[] @relation("DocumentCreator")
+
+  // Attachment relations
+  uploaded_attachments Attachment[] @relation("AttachmentUploader")
+
+  // Notification relations
+  notifications          Notification[]
+  triggered_notifications Notification[] @relation("NotificationActor")
+
+  // Misc
+  favorites     Favorite[]
+  sidebar_items SidebarItem[]
+  api_keys      ApiKey[]
+
+  @@map("user")
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  user_id    String
+  token_hash String    @unique
+  expires_at DateTime
+  revoked_at DateTime?
+  ip_address String?
+  user_agent String?
+  created_at DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_token")
+}
+
+model OAuthAccount {
+  provider_id      String
+  provider_user_id String
+  user_id          String
+
+  user User @relation(references: [id], fields: [user_id], onDelete: Cascade)
+
+  @@id([provider_user_id, provider_id])
+  @@map("oauth_account")
+}
+
+model OneTimeToken {
+  token      String   @unique
+  code       String?
+  expires_at DateTime
+  identifier String
+  purpose    String
+  metadata   Json?
+
+  @@id([token])
+  @@unique([code, identifier])
+  @@map("onetime_token")
+}
+
+model Passkey {
+  id            String   @id @default(cuid())
+  user_id       String
+  credential_id String   @unique
+  public_key    Bytes
+  counter       BigInt   @default(0)
+  name          String?
+  created_at    DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("passkey")
+}

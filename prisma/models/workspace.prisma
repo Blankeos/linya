@@ -1,0 +1,41 @@
+model Workspace {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  icon_url   String?
+  owner_id   String
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  owner   User              @relation("WorkspaceOwner", fields: [owner_id], references: [id])
+  members WorkspaceMember[]
+  teams   Team[]
+  labels  Label[]
+  projects    Project[]
+  initiatives Initiative[]
+  custom_views CustomView[]
+  customers   Customer[]
+  documents   Document[]
+  favorites   Favorite[]
+  notifications Notification[]
+  sidebar_items SidebarItem[]
+  integrations  Integration[]
+  api_keys      ApiKey[]
+  webhooks      Webhook[]
+
+  @@map("workspace")
+}
+
+model WorkspaceMember {
+  id           String   @id @default(cuid())
+  workspace_id String
+  user_id      String
+  role         String   @default("member") // owner, admin, member, guest
+  created_at   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, user_id])
+  @@map("workspace_member")
+}

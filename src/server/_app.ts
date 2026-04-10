@@ -1,15 +1,22 @@
 import { Hono } from "hono"
-import { csrf } from "hono/csrf"
 import { authController } from "./modules/auth/auth.controller"
-import { todosController } from "./modules/todos/todos.controller"
+import { workspaceController } from "./modules/workspace/workspace.controller"
+import { teamsController } from "./modules/teams/teams.controller"
+import { issuesController } from "./modules/issues/issues.controller"
+import { syncController } from "./modules/sync/sync.controller"
 
-const app = new Hono()
-
-app.use(csrf())
-
-export const appRouter = app
-  // Extends routes here...
+export const appRouter = new Hono()
+  // Extend routes here...
   .route("/auth", authController)
-  .route("/todos", todosController)
+  .route("/workspaces", workspaceController)
+  .route("/workspaces/:workspaceId/teams", teamsController)
+  .route("/issues", issuesController)
+  .route("/sync", syncController)
 
 export type AppRouter = typeof appRouter
+
+// Other files you want to include in dts bundle
+import type { ApiErrorResponse } from "./lib/error"
+import type { UserResponseDTO } from "./modules/auth/auth.dto"
+
+export type { ApiErrorResponse, UserResponseDTO }

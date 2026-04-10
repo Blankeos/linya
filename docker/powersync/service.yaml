@@ -1,0 +1,31 @@
+replication:
+  connections:
+    - type: postgresql
+      uri: postgresql://postgres:password123@postgres:5432/linya
+      sslmode: disable
+
+storage:
+  type: postgresql
+  uri: postgresql://postgres:password123@postgres:5432/linya
+  sslmode: disable
+
+port: 8080
+
+# JWT validation — must match the JWT_SECRET and kid used by the Hono server.
+# The "k" value is your JWT_SECRET base64url-encoded.
+# Default dev secret: "your-super-secret-jwt-key-at-least-32-chars"
+#   → base64url: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1hdC1sZWFzdC0zMi1jaGFycw
+# If you change JWT_SECRET in .env, regenerate "k" with:
+#   echo -n "$JWT_SECRET" | base64 | tr '+/' '-_' | tr -d '='
+client_auth:
+  audience:
+    - http://localhost:8080
+  jwks:
+    keys:
+      - kty: oct
+        alg: HS256
+        k: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1hdC1sZWFzdC0zMi1jaGFycw
+        kid: linya-v1
+
+sync_config:
+  path: /config/sync-config.yaml

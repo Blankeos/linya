@@ -1,0 +1,32 @@
+model Initiative {
+  id           String    @id @default(cuid())
+  workspace_id String
+  name         String
+  description  String?
+  icon         String?
+  color        String?
+  status       String    @default("planned") // 'planned', 'active', 'completed'
+  owner_id     String?
+  target_date  DateTime? @db.Date
+  sort_order   Float
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+
+  workspace Workspace          @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  owner     User?              @relation("InitiativeOwner", fields: [owner_id], references: [id])
+  projects  InitiativeProject[]
+
+  @@map("initiative")
+}
+
+model InitiativeProject {
+  id            String @id @default(cuid())
+  initiative_id String
+  project_id    String
+
+  initiative Initiative @relation(fields: [initiative_id], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([initiative_id, project_id])
+  @@map("initiative_project")
+}

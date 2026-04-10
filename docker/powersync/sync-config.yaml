@@ -1,0 +1,9 @@
+config:
+  edition: 3
+
+# TODO: Expand sync rules as tables are built out.
+streams:
+  current_user:
+    auto_subscribe: true
+    queries:
+      - SELECT id, email, display_name, avatar_url FROM "user"

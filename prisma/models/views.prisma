@@ -1,0 +1,22 @@
+model CustomView {
+  id              String   @id @default(cuid())
+  workspace_id    String
+  team_id         String?  // null = workspace-level
+  creator_id      String
+  name            String
+  description     String?
+  icon            String?
+  type            String   @default("issue") // 'issue', 'project'
+  filters         Json     @default("{}")
+  display_options Json     @default("{}")
+  sort_order      Float
+  is_shared       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  team      Team?     @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  creator   User      @relation("CustomViewCreator", fields: [creator_id], references: [id])
+
+  @@map("custom_view")
+}

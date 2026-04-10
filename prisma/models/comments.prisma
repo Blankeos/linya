@@ -1,0 +1,50 @@
+model Comment {
+  id                String   @id @default(cuid())
+  issue_id          String
+  user_id           String
+  body              String   // markdown
+  body_html         String?
+  parent_comment_id String?  // threaded replies
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now()) @updatedAt
+
+  issue          Issue     @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [user_id], references: [id])
+  parent_comment Comment?  @relation("CommentReplies", fields: [parent_comment_id], references: [id])
+  replies        Comment[] @relation("CommentReplies")
+  reactions      Reaction[]
+  attachments    Attachment[]
+  notifications  Notification[]
+
+  @@map("comment")
+}
+
+model Reaction {
+  id         String   @id @default(cuid())
+  user_id    String
+  comment_id String?
+  issue_id   String?
+  emoji      String
+  created_at DateTime @default(now())
+
+  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  issue   Issue?   @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+
+  @@map("reaction")
+}
+
+model IssueHistory {
+  id         String   @id @default(cuid())
+  issue_id   String
+  user_id    String?
+  field      String   // 'status', 'assignee', 'priority', 'title', etc.
+  old_value  String?
+  new_value  String?
+  created_at DateTime @default(now())
+
+  issue Issue @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [user_id], references: [id])
+
+  @@map("issue_history")
+}
