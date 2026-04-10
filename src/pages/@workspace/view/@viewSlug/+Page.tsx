@@ -4,6 +4,7 @@ import { usePageContext } from "vike-solid/usePageContext"
 import { usePowerSyncQuery } from "@/lib/powersync"
 import { navigate } from "vike/client/router"
 import getTitle from "@/utils/get-title"
+import { StatusIcon, PriorityIcon } from "@/components/issue-fields"
 
 type View = {
   id: string
@@ -35,22 +36,33 @@ type Status = "backlog" | "todo" | "in_progress" | "done" | "cancelled"
 
 function mapPriority(p: number): Priority {
   switch (p) {
-    case 1: return "urgent"
-    case 2: return "high"
-    case 3: return "medium"
-    case 4: return "low"
-    default: return "none"
+    case 1:
+      return "urgent"
+    case 2:
+      return "high"
+    case 3:
+      return "medium"
+    case 4:
+      return "low"
+    default:
+      return "none"
   }
 }
 
 function mapStatus(category: string | null): Status {
   switch (category) {
-    case "backlog": return "backlog"
-    case "unstarted": return "todo"
-    case "started": return "in_progress"
-    case "completed": return "done"
-    case "cancelled": return "cancelled"
-    default: return "backlog"
+    case "backlog":
+      return "backlog"
+    case "unstarted":
+      return "todo"
+    case "started":
+      return "in_progress"
+    case "completed":
+      return "done"
+    case "cancelled":
+      return "cancelled"
+    default:
+      return "backlog"
   }
 }
 
@@ -144,7 +156,11 @@ export default function ViewPage() {
       conditions.push(`ws.id IN (${ids})`)
     }
 
-    if (filters.assigneeIds && Array.isArray(filters.assigneeIds) && filters.assigneeIds.length > 0) {
+    if (
+      filters.assigneeIds &&
+      Array.isArray(filters.assigneeIds) &&
+      filters.assigneeIds.length > 0
+    ) {
       const ids = filters.assigneeIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",")
       conditions.push(`i.assignee_id IN (${ids})`)
     }
@@ -175,7 +191,10 @@ export default function ViewPage() {
       {/* Header */}
       <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border/50 shrink-0">
         <div class="flex items-center gap-1.5 text-[13px] flex-1">
-          <a href={`/${workspaceSlug()}/views/issues`} class="text-muted-foreground hover:text-foreground">
+          <a
+            href={`/${workspaceSlug()}/views/issues`}
+            class="text-muted-foreground hover:text-foreground"
+          >
             Views
           </a>
           <span class="text-muted-foreground/40">/</span>
@@ -249,8 +268,8 @@ function IssueRow(props: {
       href={props.href}
       class="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors border-b border-border/20 last:border-b-0"
     >
-      <PriorityIcon priority={props.priority} class="size-3.5 shrink-0" />
-      <StatusIcon status={props.status} class="size-3.5 shrink-0" />
+      <PriorityIcon value={props.priority} class="size-3.5 shrink-0" />
+      <StatusIcon category={props.status} class="size-3.5 shrink-0" />
       <span class="font-mono text-[12px] text-muted-foreground w-16 shrink-0">{props.issueId}</span>
       <span class="text-[13px] text-foreground flex-1 truncate">{props.title}</span>
 
@@ -271,79 +290,6 @@ function IssueRow(props: {
       </Show>
     </a>
   )
-}
-
-function PriorityIcon(props: { priority: Priority; class?: string }) {
-  const colorMap = {
-    urgent: "rgb(239, 68, 68)",
-    high: "rgb(251, 146, 60)",
-    medium: "rgb(34, 197, 94)",
-    low: "rgb(59, 130, 246)",
-    none: "rgb(107, 114, 128)",
-  }
-
-  return (
-    <svg viewBox="0 0 8 16" fill="currentColor" class={props.class}>
-      <rect
-        y="0"
-        width="8"
-        height="4"
-        fill={props.priority === "urgent" ? colorMap.urgent : "rgba(107, 114, 128, 0.2)"}
-      />
-      <rect
-        y="4"
-        width="8"
-        height="4"
-        fill={["urgent", "high"].includes(props.priority) ? colorMap[props.priority] : "rgba(107, 114, 128, 0.2)"}
-      />
-      <rect
-        y="8"
-        width="8"
-        height="4"
-        fill={["urgent", "high", "medium"].includes(props.priority) ? colorMap[props.priority] : "rgba(107, 114, 128, 0.2)"}
-      />
-      <rect
-        y="12"
-        width="8"
-        height="4"
-        fill={props.priority !== "none" ? colorMap[props.priority] : "rgba(107, 114, 128, 0.2)"}
-      />
-    </svg>
-  )
-}
-
-function StatusIcon(props: { status: Status; class?: string }) {
-  const iconMap = {
-    backlog: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-      </svg>
-    ),
-    todo: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9" />
-      </svg>
-    ),
-    in_progress: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="9" opacity="0.5" />
-        <circle cx="12" cy="12" r="5" />
-      </svg>
-    ),
-    done: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    ),
-    cancelled: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    ),
-  }
-
-  return <div class={`flex items-center justify-center text-muted-foreground ${props.class}`}>{iconMap[props.status]}</div>
 }
 
 function EditIcon(props: { class?: string }) {

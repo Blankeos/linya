@@ -1,11 +1,13 @@
-import { createEffect, createSignal, For, onCleanup, onMount } from "solid-js"
-import { useMetadata } from "vike-metadata-solid"
+import { createSignal, For, Show } from "solid-js"
 import { usePageContext } from "vike-solid/usePageContext"
-import { navigate } from "vike/client/router"
 import { usePowerSyncQuery } from "@/lib/powersync"
-import { honoClient } from "@/lib/hono-client"
-import getTitle from "@/utils/get-title"
-import { PillTabs } from "@/components/pill-tabs"
+import { useNewView } from "../+Layout"
+import {
+  StatusIcon,
+  PriorityIcon,
+  ProjectStatusIcon,
+  type ProjectStatus,
+} from "@/components/issue-fields"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +32,19 @@ type StatusGroup = {
   category: string
   color: string
   issues: IssueRow[]
+}
+
+type ProjectRow = {
+  id: string
+  name: string
+  description: string | null
+  icon: string | null
+  color: string | null
+  status: string
+  lead_id: string | null
+  start_date: string | null
+  target_date: string | null
+  created_at: string
 }
 
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
@@ -71,6 +86,21 @@ function mapStatusCategory(category: string | null): StatusCategory {
   }
 }
 
+function mapProjectStatus(status: string | null): ProjectStatus {
+  switch (status) {
+    case "planned":
+      return "planned"
+    case "in_progress":
+      return "in_progress"
+    case "completed":
+      return "completed"
+    case "canceled":
+      return "canceled"
+    default:
+      return "backlog"
+  }
+}
+
 function formatDate(date: string | null): string | null {
   if (!date) return null
   const d = new Date(date)
@@ -93,47 +123,27 @@ function slugify(text: string) {
 // ---------------------------------------------------------------------------
 
 export default function NewViewPage() {
-  useMetadata({ title: getTitle("New View") })
   const pageCtx = usePageContext()
-  const workspaceSlug = () => (pageCtx.routeParams as Record<string, string>).workspace ?? ""
-
-  const [viewName, setViewName] = createSignal("")
-  const [viewDescription, setViewDescription] = createSignal("")
-  const [isCreating, setIsCreating] = createSignal(false)
-  const [workspaceId, setWorkspaceId] = createSignal<string | null>(null)
-  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set())
-
-  // Esc key: blur focused input on first press, navigate back on second press
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== "Escape") return
-    const active = document.activeElement
-    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
-      ;(active as HTMLElement).blur()
-      return
-    }
-    navigate(`/${workspaceSlug()}/views/issues`)
+  const viewType = () => {
+    const type = (pageCtx.routeParams as Record<string, string>).viewType
+    return type === "projects" ? "projects" : "issues"
   }
 
-  onMount(() => document.addEventListener("keydown", handleKeyDown))
-  onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
+  return (
+    <Show when={viewType() === "issues"} fallback={<ProjectsView />}>
+      <IssuesView />
+    </Show>
+  )
+}
 
-  // Load workspace ID
-  createEffect(() => {
-    if (workspaceId()) return
-    const load = async () => {
-      try {
-        const client = honoClient()
-        const res = await client.workspaces.$get()
-        if (!res.ok) return
-        const data = await res.json()
-        const ws = (data as any).workspaces?.find((w: any) => w.slug === workspaceSlug())
-        if (ws) setWorkspaceId(ws.id)
-      } catch {}
-    }
-    load()
-  })
+// ---------------------------------------------------------------------------
+// Issues View
+// ---------------------------------------------------------------------------
 
-  // All issues in the workspace grouped by status
+function IssuesView() {
+  const ctx = useNewView()
+  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set())
+
   const [issues] = usePowerSyncQuery<IssueRow>(
     () => `
       SELECT
@@ -182,190 +192,21 @@ export default function NewViewPage() {
     })
   }
 
-  const handleSave = async () => {
-    if (!viewName().trim() || !workspaceId()) return
-    try {
-      setIsCreating(true)
-      const client = honoClient()
-      const res = await (client.workspaces as any)[":workspaceId"].views.$post({
-        param: { workspaceId: workspaceId()! },
-        json: {
-          name: viewName(),
-          description: viewDescription() || undefined,
-          type: "issue",
-          filters: {},
-          isShared: false,
-        },
-      })
-      if (!res.ok) return
-      const data = await res.json()
-      const viewId = (data as any).view?.id
-      navigate(viewId ? `/${workspaceSlug()}/view/${viewId}` : `/${workspaceSlug()}/views/issues`)
-    } catch (error) {
-      console.error("Failed to create view:", error)
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
   return (
-    <>
-      {/* Breadcrumb - OUTSIDE the card */}
-      <div class="flex items-center justify-between px-4 py-2 text-[13px] text-muted-foreground shrink-0">
-        <div class="flex items-center gap-1.5">
-          <a
-            href={`/${workspaceSlug()}/views/issues`}
-            class="hover:text-foreground transition-colors"
-          >
-            Views
-          </a>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="size-3"
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-          <span class="text-foreground">All issues</span>
-        </div>
-        <button
-          type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="size-4"
-          >
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Card with border - header + tabs only */}
-      <div class="flex shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card mx-2 mt-2">
-        {/* ── Header ──────────────────────────────────────────────── */}
-        <div class="shrink-0 border-b border-border px-5 pt-4 pb-3.5">
-          {/* Row 1: icon + title + actions */}
-          <div class="flex items-center gap-3">
-            {/* Icon button */}
-            <button
-              type="button"
-              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-foreground/70 transition-colors hover:bg-muted"
-            >
-              <LayersIcon class="size-4" />
-            </button>
-
-            {/* Title input */}
-            <input
-              type="text"
-              value={viewName()}
-              onInput={(e) => setViewName(e.currentTarget.value)}
-              placeholder="All issues"
-              class="min-w-0 flex-1 bg-transparent text-[18px] font-medium text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
-            />
-
-            {/* Actions */}
-            <div class="flex shrink-0 items-center gap-2">
-              <span class="text-[13px] text-muted-foreground">Save to</span>
-              <button
-                type="button"
-                class="flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-white/5"
-              >
-                <LockIcon class="size-3 text-muted-foreground" />
-                Personal
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(`/${workspaceSlug()}/views/issues`)}
-                class="rounded-full px-3 py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!viewName().trim() || isCreating() || !workspaceId()}
-                class="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {isCreating() ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-
-          {/* Row 2: description — indented to align with title */}
-          <div class="mt-2 pl-[calc(theme(spacing.9)+theme(spacing.3))]">
-            <input
-              type="text"
-              value={viewDescription()}
-              onInput={(e) => setViewDescription(e.currentTarget.value)}
-              placeholder="Description (optional)"
-              class="w-full bg-transparent text-[13px] text-muted-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* ── Tabs + controls ─────────────────────────────────────── */}
-        <div class="flex shrink-0 items-center border-b border-border px-4 py-2">
-          <div class="flex-1">
-            <PillTabs
-              tabs={[
-                { label: "Issues", href: `/${workspaceSlug()}/views/issues/new` },
-                { label: "Projects", href: `/${workspaceSlug()}/views/projects/new` },
-              ]}
-              active="issues"
-              variant="compact"
-              containerClass="flex items-center gap-1"
-            />
-          </div>
-          <div class="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              class="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-            >
-              <FilterIcon class="size-3.5" />
-            </button>
-            <button
-              type="button"
-              class="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-            >
-              <DisplayIcon class="size-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Issue list ──────────────────────────────────────────── */}
-      <div class="flex-1 overflow-y-auto px-2 mt-2">
-        <For each={groupedIssues()}>
-          {(group) => (
-            <GroupSection
-              group={group}
-              workspaceSlug={workspaceSlug()}
-              collapsed={collapsedGroups().has(group.id)}
-              onToggle={() => toggleGroup(group.id)}
-            />
-          )}
-        </For>
-      </div>
-    </>
+    <div class="flex-1 overflow-y-auto px-2 mt-2">
+      <For each={groupedIssues()}>
+        {(group) => (
+          <GroupSection
+            group={group}
+            workspaceSlug={ctx.workspaceSlug()}
+            collapsed={collapsedGroups().has(group.id)}
+            onToggle={() => toggleGroup(group.id)}
+          />
+        )}
+      </For>
+    </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// GroupSection
-// ---------------------------------------------------------------------------
 
 function GroupSection(props: {
   group: StatusGroup
@@ -389,7 +230,7 @@ function GroupSection(props: {
           />
         </button>
 
-        <StatusCircle category={category()} color={props.group.color} class="size-3.5 shrink-0" />
+        <StatusIcon category={category()} color={props.group.color} class="size-3.5 shrink-0" />
 
         <span class="text-[13px] font-medium text-foreground">{props.group.name}</span>
         <span class="text-[12px] text-muted-foreground/60">{props.group.issues.length}</span>
@@ -403,18 +244,14 @@ function GroupSection(props: {
       </div>
 
       {/* Issues */}
-      {!props.collapsed && (
+      <Show when={!props.collapsed}>
         <For each={props.group.issues}>
           {(issue) => <IssueItem issue={issue} workspaceSlug={props.workspaceSlug} />}
         </For>
-      )}
+      </Show>
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// IssueItem
-// ---------------------------------------------------------------------------
 
 function IssueItem(props: { issue: IssueRow; workspaceSlug: string }) {
   const priority = () => mapPriority(props.issue.priority)
@@ -437,7 +274,7 @@ function IssueItem(props: { issue: IssueRow; workspaceSlug: string }) {
       <span class="w-14 shrink-0 font-mono text-[12px] text-muted-foreground/60">{issueId()}</span>
 
       {/* Status circle */}
-      <StatusCircle
+      <StatusIcon
         category={category()}
         color={props.issue.status_color}
         class="size-3.5 shrink-0"
@@ -447,7 +284,7 @@ function IssueItem(props: { issue: IssueRow; workspaceSlug: string }) {
       <span class="flex-1 truncate text-[13px] text-foreground">{props.issue.title}</span>
 
       {/* Priority */}
-      <PriorityIcon priority={priority()} class="size-3.5 shrink-0 text-muted-foreground/60" />
+      <PriorityIcon value={priority()} class="size-3.5 shrink-0 text-muted-foreground/60" />
 
       {/* Assignee avatar placeholder */}
       <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted/60 text-muted-foreground/60">
@@ -461,81 +298,156 @@ function IssueItem(props: { issue: IssueRow; workspaceSlug: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Icons
+// Projects View
 // ---------------------------------------------------------------------------
 
-function LayersIcon(props: { class?: string }) {
+function ProjectsView() {
+  const ctx = useNewView()
+
+  const [projects] = usePowerSyncQuery<ProjectRow>(
+    () => `
+      SELECT
+        p.id,
+        p.name,
+        p.description,
+        p.icon,
+        p.color,
+        p.status,
+        p.lead_id,
+        p.start_date,
+        p.target_date,
+        p.created_at
+      FROM project p
+      JOIN workspace w ON p.workspace_id = w.id
+      WHERE w.slug = ?
+      ORDER BY 
+        CASE p.status
+          WHEN 'backlog' THEN 1
+          WHEN 'planned' THEN 2
+          WHEN 'in_progress' THEN 3
+          WHEN 'completed' THEN 4
+          WHEN 'canceled' THEN 5
+          ELSE 6
+        END,
+        p.sort_order ASC,
+        p.created_at DESC
+    `,
+    () => [ctx.workspaceSlug()]
+  )
+
+  const groupedProjects = () => {
+    const groups: Record<ProjectStatus, ProjectRow[]> = {
+      backlog: [],
+      planned: [],
+      in_progress: [],
+      completed: [],
+      canceled: [],
+    }
+    for (const project of projects()) {
+      const status = mapProjectStatus(project.status)
+      groups[status].push(project)
+    }
+    return groups
+  }
+
+  const statusConfig: Record<ProjectStatus, { label: string; color: string }> = {
+    backlog: { label: "Backlog", color: "#6b7280" },
+    planned: { label: "Planned", color: "#3b82f6" },
+    in_progress: { label: "In Progress", color: "#f59e0b" },
+    completed: { label: "Completed", color: "#22c55e" },
+    canceled: { label: "Canceled", color: "#ef4444" },
+  }
+
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
+    <div class="flex-1 overflow-y-auto px-2 mt-2">
+      <For each={Object.entries(groupedProjects())}>
+        {([status, projects]) => (
+          <Show when={projects.length > 0}>
+            <div>
+              {/* Group header */}
+              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-border/20 bg-card/95 px-4 py-1.5 backdrop-blur-sm rounded-lg">
+                <ProjectStatusIcon
+                  status={status as ProjectStatus}
+                  color={statusConfig[status as ProjectStatus].color}
+                  class="size-3.5 shrink-0"
+                />
+                <span class="text-[13px] font-medium text-foreground">
+                  {statusConfig[status as ProjectStatus].label}
+                </span>
+                <span class="text-[12px] text-muted-foreground/60">{projects.length}</span>
+              </div>
+
+              {/* Projects */}
+              <For each={projects}>
+                {(project) => <ProjectItem project={project} workspaceSlug={ctx.workspaceSlug()} />}
+              </For>
+            </div>
+          </Show>
+        )}
+      </For>
+    </div>
   )
 }
 
-function LockIcon(props: { class?: string }) {
+function ProjectItem(props: { project: ProjectRow; workspaceSlug: string }) {
+  const projectHref = () =>
+    `/${props.workspaceSlug}/project/${props.project.id}/${slugify(props.project.name)}`
+  const status = () => mapProjectStatus(props.project.status)
+  const dateRange = () => {
+    const start = formatDate(props.project.start_date)
+    const end = formatDate(props.project.target_date)
+    if (start && end) return `${start} - ${end}`
+    if (end) return `Due ${end}`
+    return null
+  }
+
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
+    <a
+      href={projectHref()}
+      class="group/row flex items-center gap-2 border-b border-border/10 px-4 py-2 transition-colors hover:bg-white/5 last:border-b-0 rounded-lg"
     >
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
+      {/* Drag handle */}
+      <span class="shrink-0 cursor-grab text-muted-foreground/20 transition-opacity group-hover/row:text-muted-foreground/40">
+        <DragHandleIcon class="size-3" />
+      </span>
+
+      {/* Project icon */}
+      <div
+        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-medium"
+        style={{ background: props.project.color || "#6b7280" }}
+      >
+        {props.project.icon || "📁"}
+      </div>
+
+      {/* Status circle */}
+      <ProjectStatusIcon status={status()} color={props.project.color} class="size-3.5 shrink-0" />
+
+      {/* Title */}
+      <span class="flex-1 truncate text-[13px] text-foreground">{props.project.name}</span>
+
+      {/* Description preview */}
+      <Show when={!!props.project.description}>
+        <span class="hidden max-w-[200px] truncate text-[12px] text-muted-foreground/60 sm:block">
+          {props.project.description}
+        </span>
+      </Show>
+
+      {/* Lead avatar placeholder */}
+      <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted/60 text-muted-foreground/60">
+        <PersonIcon class="size-2.5" />
+      </span>
+
+      {/* Date range */}
+      <Show when={!!dateRange()}>
+        <span class="shrink-0 text-[12px] text-muted-foreground/60">{dateRange()}</span>
+      </Show>
+    </a>
   )
 }
 
-function FilterIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  )
-}
-
-function DisplayIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <line x1="4" y1="6" x2="20" y2="6" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-      <line x1="12" y1="18" x2="12" y2="18" stroke-width="3" stroke-linecap="round" />
-    </svg>
-  )
-}
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
 
 function ChevronDownIcon(props: { class?: string }) {
   return (
@@ -703,6 +615,101 @@ function StatusCircle(props: { category: StatusCategory; color: string | null; c
         </svg>
       )
     case "cancelled":
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class}>
+          <circle cx="12" cy="12" r="9" stroke={color} stroke-width="2" opacity="0.5" />
+          <line
+            x1="8"
+            y1="8"
+            x2="16"
+            y2="16"
+            stroke={color}
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+          <line
+            x1="16"
+            y1="8"
+            x2="8"
+            y2="16"
+            stroke={color}
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      )
+  }
+}
+
+function ProjectStatusCircle(props: {
+  status: ProjectStatus
+  color: string | null
+  class?: string
+}) {
+  const color = props.color ?? "#6b7280"
+
+  switch (props.status) {
+    case "backlog":
+      return (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={color}
+          stroke-width="2"
+          class={props.class}
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2" />
+        </svg>
+      )
+    case "planned":
+      return (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={color}
+          stroke-width="2"
+          class={props.class}
+        >
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="4" fill={color} />
+        </svg>
+      )
+    case "in_progress":
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class}>
+          <circle cx="12" cy="12" r="9" fill={color} opacity="0.2" />
+          <path
+            d="M12 3 A9 9 0 0 1 21 12"
+            stroke={color}
+            stroke-width="2"
+            stroke-linecap="round"
+            fill="none"
+          />
+        </svg>
+      )
+    case "completed":
+      return (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill={color}
+          class={props.class}
+        >
+          <circle cx="12" cy="12" r="9" opacity="0.2" />
+          <circle cx="12" cy="12" r="9" fill="none" stroke={color} stroke-width="2" />
+          <polyline
+            points="7 12 10.5 15.5 17 9"
+            fill="none"
+            stroke={color}
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      )
+    case "canceled":
       return (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class}>
           <circle cx="12" cy="12" r="9" stroke={color} stroke-width="2" opacity="0.5" />

@@ -51,10 +51,16 @@ export default function ViewsProjectsPage() {
         <div class="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => navigate(`/${workspaceSlug()}/views/issues/new`)}
+            onClick={() => navigate(`/${workspaceSlug()}/views/new/projects`)}
             class="flex items-center justify-center w-7 h-7 rounded hover:bg-white/5 transition-colors text-muted-foreground hover:text-foreground"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              class="w-4 h-4"
+            >
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -63,7 +69,13 @@ export default function ViewsProjectsPage() {
             type="button"
             class="flex items-center justify-center w-7 h-7 rounded hover:bg-white/5 transition-colors text-muted-foreground hover:text-foreground"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              class="w-4 h-4"
+            >
               <line x1="4" y1="6" x2="20" y2="6" />
               <line x1="4" y1="12" x2="20" y2="12" />
               <line x1="4" y1="18" x2="20" y2="18" />
@@ -91,22 +103,28 @@ export default function ViewsProjectsPage() {
               <div class="flex flex-col gap-3">
                 <h2 class="text-[16px] font-semibold text-foreground">Views</h2>
                 <p class="text-[13px] text-muted-foreground leading-relaxed">
-                  Create custom views using filters to show only the projects you want to see. You can save,
-                  share, and favorite these views for easy access and faster team collaboration.
+                  Create custom views using filters to show only the projects you want to see. You
+                  can save, share, and favorite these views for easy access and faster team
+                  collaboration.
                 </p>
                 <p class="text-[13px] text-muted-foreground">
                   You can also save any existing view by clicking the{" "}
-                  <span class="inline-flex items-center justify-center w-4 h-4 rounded border border-border/50 text-[10px] align-middle">⊕</span>
-                  {" "}icon or by pressing{" "}
-                  <kbd class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-border/50 bg-muted text-[11px] font-mono">⌥</kbd>
-                  {" "}
-                  <kbd class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-border/50 bg-muted text-[11px] font-mono">V</kbd>
+                  <span class="inline-flex items-center justify-center w-4 h-4 rounded border border-border/50 text-[10px] align-middle">
+                    ⊕
+                  </span>{" "}
+                  icon or by pressing{" "}
+                  <kbd class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-border/50 bg-muted text-[11px] font-mono">
+                    ⌥
+                  </kbd>{" "}
+                  <kbd class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-border/50 bg-muted text-[11px] font-mono">
+                    V
+                  </kbd>
                   .
                 </p>
               </div>
               <div>
                 <button
-                  onClick={() => navigate(`/${workspaceSlug()}/views/issues/new`)}
+                  onClick={() => navigate(`/${workspaceSlug()}/views/new/projects`)}
                   class="rounded-full bg-primary px-5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-primary/90"
                 >
                   Create new view

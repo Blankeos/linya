@@ -10,6 +10,7 @@ import {
   IconTag,
   IconProjects,
   IconCheck,
+  IconInfo,
 } from "@/assets/icons"
 import { type ComboboxItem } from "@/components/ui/combobox-2"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -52,6 +53,13 @@ type IssueRow = {
 }
 
 type LabelRow = {
+  id: string
+  name: string
+  color: string | null
+}
+
+type AvailableLabelRow = {
+  id: string
   name: string
   color: string | null
 }
@@ -66,6 +74,7 @@ type CommentRow = {
 
 type UserRow = {
   id: string
+  email: string | null
   display_name: string | null
   avatar_url: string | null
 }
@@ -76,7 +85,6 @@ type StatusRow = {
   category: StatusCategory
   color: string | null
 }
-
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—"
@@ -96,18 +104,23 @@ function formatDateTime(iso: string | null): string {
   if (!iso) return "—"
   const d = new Date(iso)
   if (isNaN(d.getTime())) return "—"
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-    " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+    " at " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  )
 }
 
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 48) || "untitled"
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 48) || "untitled"
+  )
 }
 
 // Parse "WEB-1" → { teamIdentifier: "WEB", number: 1 }
@@ -153,12 +166,22 @@ export default function IssueDetailPage() {
 
   const [labels] = usePowerSyncQuery<LabelRow>(
     () => `
-      SELECT l.name, l.color
+      SELECT il.label_id as id, l.name, l.color
       FROM issue_label il
       JOIN label l ON il.label_id = l.id
       WHERE il.issue_id = ?
     `,
     () => [issue()?.id ?? ""]
+  )
+
+  const [availableLabels] = usePowerSyncQuery<AvailableLabelRow>(
+    () => `
+      SELECT id, name, color
+      FROM label
+      WHERE team_id = ?
+      ORDER BY name ASC
+    `,
+    () => [issue()?.team_id ?? ""]
   )
 
   const [comments] = usePowerSyncQuery<CommentRow>(
@@ -188,14 +211,15 @@ export default function IssueDetailPage() {
 
   const [users] = usePowerSyncQuery<UserRow>(
     () => `
-      SELECT id, display_name, avatar_url
+      SELECT id, email, display_name, avatar_url
       FROM user
       ORDER BY display_name ASC
     `,
     () => []
   )
 
-  const issueIdentifier = () => issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
+  const issueIdentifier = () =>
+    issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
   const priority = () => mapPriority(issue()?.priority ?? 0)
   const statusCategory = () => issue()?.status_category ?? null
 
@@ -305,7 +329,9 @@ export default function IssueDetailPage() {
               {/* Main column */}
               <div class="flex-1 overflow-y-auto px-8 py-6 min-w-0">
                 <div class="flex items-center gap-2 mb-3">
-                  <span class="text-[12px] font-mono text-muted-foreground/60">{issueIdentifier()}</span>
+                  <span class="text-[12px] font-mono text-muted-foreground/60">
+                    {issueIdentifier()}
+                  </span>
                   <StatusBadge category={statusCategory()} name={iss().status_name} />
                 </div>
 
@@ -407,12 +433,35 @@ export default function IssueDetailPage() {
                 <IssueSidebar
                   issue={iss()}
                   labels={labels()}
+                  availableLabels={availableLabels()}
                   statuses={availableStatuses()}
                   users={users()}
                   workspaceSlug={workspaceSlug()}
-                  onStatusChange={(statusId) => execute("UPDATE issue SET status_id = ? WHERE id = ?", [statusId, iss().id])}
-                  onPriorityChange={(p) => execute("UPDATE issue SET priority = ? WHERE id = ?", [p, iss().id])}
-                  onAssigneeChange={(userId) => execute("UPDATE issue SET assignee_id = ? WHERE id = ?", [userId || null, iss().id])}
+                  onStatusChange={(statusId) =>
+                    execute("UPDATE issue SET status_id = ? WHERE id = ?", [statusId, iss().id])
+                  }
+                  onPriorityChange={(p) =>
+                    execute("UPDATE issue SET priority = ? WHERE id = ?", [p, iss().id])
+                  }
+                  onAssigneeChange={(userId) =>
+                    execute("UPDATE issue SET assignee_id = ? WHERE id = ?", [
+                      userId || null,
+                      iss().id,
+                    ])
+                  }
+                  onLabelToggle={async (labelId, isAdding) => {
+                    if (isAdding) {
+                      await execute(
+                        "INSERT INTO issue_label (id, issue_id, label_id) VALUES (?, ?, ?)",
+                        [crypto.randomUUID(), iss().id, labelId]
+                      )
+                    } else {
+                      await execute("DELETE FROM issue_label WHERE issue_id = ? AND label_id = ?", [
+                        iss().id,
+                        labelId,
+                      ])
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -430,12 +479,14 @@ export default function IssueDetailPage() {
 interface IssueSidebarProps {
   issue: IssueRow | undefined
   labels: LabelRow[]
+  availableLabels: AvailableLabelRow[]
   statuses: StatusRow[]
   users: UserRow[]
   workspaceSlug: string
   onStatusChange: (statusId: string) => void
   onPriorityChange: (priority: number) => void
   onAssigneeChange: (userId: string | null) => void
+  onLabelToggle: (labelId: string, isAdding: boolean) => void
 }
 
 function IssueSidebar(props: IssueSidebarProps) {
@@ -465,12 +516,66 @@ function IssueSidebar(props: IssueSidebarProps) {
     setTimeout(() => setter(false), 1500)
   }
 
+  function copyIssueId() {
+    const text = issueIdentifier
+    navigator.clipboard.writeText(text)
+    toast.success(`"${text}" copied to clipboard`)
+    setCopiedId(true)
+    setTimeout(() => setCopiedId(false), 1500)
+  }
+
+  function copyBranchName() {
+    const text = branchName
+    navigator.clipboard.writeText(text)
+    toast.success(
+      <div class="flex gap-3">
+        <div class="flex flex-col gap-0.5">
+          <div class="text-xs font-medium">{text}</div>
+          <div class="text-xs opacity-80">
+            Branch name copied to clipboard. Paste it into your favorite git client.
+          </div>
+        </div>
+      </div>,
+      { duration: 4000 }
+    )
+    setCopiedBranch(true)
+    setTimeout(() => setCopiedBranch(false), 1500)
+  }
+
   function buildPrompt() {
     return `Issue: ${issueIdentifier} — ${iss.title}\n\n${iss.description ?? ""}`
   }
 
   const statusItems = () => makeStatusItems(props.statuses)
   const priorityItems = () => makePriorityItems()
+
+  const selectedLabelIds = () => props.labels.map((l) => l.id).join(",")
+
+  const labelItems = (): ComboboxItem[] =>
+    props.availableLabels.map((l) => ({
+      value: l.id,
+      label: (
+        <span class="flex items-center gap-2">
+          <span
+            class="size-2.5 rounded-full shrink-0"
+            style={{ "background-color": l.color ?? "#6b7280" }}
+          />
+          {l.name}
+        </span>
+      ),
+    }))
+
+  function handleLabelChange(newValues: string | string[]) {
+    const newIds = Array.isArray(newValues) ? newValues : newValues ? [newValues] : []
+    const prevIds = new Set(props.labels.map((l) => l.id))
+    const nextIds = new Set(newIds)
+    for (const id of nextIds) {
+      if (!prevIds.has(id)) props.onLabelToggle(id, true)
+    }
+    for (const id of prevIds) {
+      if (!nextIds.has(id)) props.onLabelToggle(id, false)
+    }
+  }
 
   const assigneeItems = (): ComboboxItem[] => [
     {
@@ -490,19 +595,27 @@ function IssueSidebar(props: IssueSidebarProps) {
         <span class="flex items-center gap-2">
           <div class="size-4 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
             <span class="text-[8px] font-medium text-primary">
-              {(u.display_name ?? "?").charAt(0).toUpperCase()}
+              {(u.display_name || "?").charAt(0).toUpperCase()}
             </span>
           </div>
-          {u.display_name ?? "Unknown"}
+          {u.display_name || u.email || "Unknown"}
         </span>
       ),
     })),
   ]
 
   useHotkeys([
-    ["meta+shift+,", () => flashCopy(setCopiedUrl, typeof window !== "undefined" ? window.location.href : "", "Issue URL copied")],
-    ["meta+.", () => flashCopy(setCopiedId, issueIdentifier, "Issue ID copied")],
-    ["meta+shift+.", () => flashCopy(setCopiedBranch, branchName, "Branch name copied")],
+    [
+      "meta+shift+,",
+      () =>
+        flashCopy(
+          setCopiedUrl,
+          typeof window !== "undefined" ? window.location.href : "",
+          "Issue URL copied to clipboard"
+        ),
+    ],
+    ["meta+.", copyIssueId],
+    ["meta+shift+.", copyBranchName],
     ["meta+alt+p", () => flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")],
   ])
 
@@ -513,7 +626,14 @@ function IssueSidebar(props: IssueSidebarProps) {
         {/* Copy issue URL */}
         <Tippy content="Copy issue URL  ⌘⇧," props={{ placement: "bottom" }}>
           <button
-            onClick={() => flashCopy(setCopiedUrl, typeof window !== "undefined" ? window.location.href : "", "Issue URL copied")}
+            type="button"
+            onClick={() =>
+              flashCopy(
+                setCopiedUrl,
+                typeof window !== "undefined" ? window.location.href : "",
+                "Issue URL copied to clipboard"
+              )
+            }
             class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
           >
             <Show when={copiedUrl()} fallback={<SidebarLinkIcon class="size-[15px]" />}>
@@ -525,7 +645,8 @@ function IssueSidebar(props: IssueSidebarProps) {
         {/* Copy issue ID */}
         <Tippy content="Copy issue ID  ⌘." props={{ placement: "bottom" }}>
           <button
-            onClick={() => flashCopy(setCopiedId, issueIdentifier, "Issue ID copied")}
+            type="button"
+            onClick={copyIssueId}
             class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
           >
             <Show when={copiedId()} fallback={<IdBadgeIcon class="size-[15px]" />}>
@@ -537,7 +658,8 @@ function IssueSidebar(props: IssueSidebarProps) {
         {/* Copy git branch name */}
         <Tippy content="Copy git branch name  ⌘⇧." props={{ placement: "bottom" }}>
           <button
-            onClick={() => flashCopy(setCopiedBranch, branchName, "Branch name copied")}
+            type="button"
+            onClick={copyBranchName}
             class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
           >
             <Show when={copiedBranch()} fallback={<GitBranchIcon class="size-[15px]" />}>
@@ -550,6 +672,7 @@ function IssueSidebar(props: IssueSidebarProps) {
         <div class="flex items-center rounded-full bg-white/[0.05] overflow-hidden">
           <Tippy content="Copy as prompt  ⌘⌥P" props={{ placement: "bottom" }}>
             <button
+              type="button"
               onClick={() => flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")}
               class="h-[33px] px-2 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors"
             >
@@ -564,13 +687,18 @@ function IssueSidebar(props: IssueSidebarProps) {
             </PopoverTrigger>
             <PopoverContent class="w-48 p-1">
               <button
-                onClick={() => { flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt"); setPromptMenuOpen(false) }}
+                type="button"
+                onClick={() => {
+                  flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")
+                  setPromptMenuOpen(false)
+                }}
                 class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] text-foreground hover:bg-white/[0.06] transition-colors text-left"
               >
                 <CursorPromptIcon class="size-3.5 shrink-0 text-muted-foreground" />
                 Copy as prompt
               </button>
               <button
+                type="button"
                 onClick={() => setPromptMenuOpen(false)}
                 class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] text-foreground hover:bg-white/[0.06] transition-colors text-left"
               >
@@ -586,6 +714,7 @@ function IssueSidebar(props: IssueSidebarProps) {
       <div class="rounded-xl bg-white/[0.04] overflow-hidden">
         {/* Card header */}
         <button
+          type="button"
           onclick={() => setPropertiesOpen((o) => !o)}
           class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -608,8 +737,13 @@ function IssueSidebar(props: IssueSidebarProps) {
               searchPlaceholder="Search status..."
               contentClass="w-56"
             >
-              <StatusIcon category={currentStatus()?.category ?? null} class="size-[15px] shrink-0" />
-              <span class="font-medium text-foreground">{currentStatus()?.name ?? "No status"}</span>
+              <StatusIcon
+                category={currentStatus()?.category ?? null}
+                class="size-[15px] shrink-0"
+              />
+              <span class="font-medium text-foreground">
+                {currentStatus()?.name ?? "No status"}
+              </span>
             </SidebarCombobox>
 
             {/* Priority */}
@@ -621,8 +755,16 @@ function IssueSidebar(props: IssueSidebarProps) {
               contentClass="w-52"
             >
               <PriorityIcon value={props.issue?.priority ?? 0} class="size-3.5 shrink-0" />
-              <span class={cn(currentPriority() === "none" ? "text-muted-foreground" : "font-medium text-foreground")}>
-                {currentPriority() === "none" ? "Set priority" : currentPriority().charAt(0).toUpperCase() + currentPriority().slice(1)}
+              <span
+                class={cn(
+                  currentPriority() === "none"
+                    ? "text-muted-foreground"
+                    : "font-medium text-foreground"
+                )}
+              >
+                {currentPriority() === "none"
+                  ? "Set priority"
+                  : currentPriority().charAt(0).toUpperCase() + currentPriority().slice(1)}
               </span>
             </SidebarCombobox>
 
@@ -639,7 +781,11 @@ function IssueSidebar(props: IssueSidebarProps) {
                   {iss.assignee_name ? iss.assignee_name.charAt(0).toUpperCase() : "?"}
                 </span>
               </div>
-              <span class={cn(iss.assignee_name ? "font-medium text-foreground" : "text-muted-foreground")}>
+              <span
+                class={cn(
+                  iss.assignee_name ? "font-medium text-foreground" : "text-muted-foreground"
+                )}
+              >
                 {iss.assignee_name ?? "Assign"}
               </span>
             </SidebarCombobox>
@@ -650,6 +796,7 @@ function IssueSidebar(props: IssueSidebarProps) {
       {/* Labels Card */}
       <div class="rounded-xl bg-white/[0.04] overflow-hidden">
         <button
+          type="button"
           onclick={() => setLabelsOpen((o) => !o)}
           class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -672,7 +819,9 @@ function IssueSidebar(props: IssueSidebarProps) {
                       class="text-[11px] px-2 py-0.5 rounded-full font-medium"
                       style={{
                         color: label.color ?? "var(--muted-foreground)",
-                        "background-color": label.color ? `${label.color}22` : "rgba(255,255,255,0.06)",
+                        "background-color": label.color
+                          ? `${label.color}22`
+                          : "rgba(255,255,255,0.06)",
                       }}
                     >
                       {label.name}
@@ -681,10 +830,17 @@ function IssueSidebar(props: IssueSidebarProps) {
                 </For>
               </div>
             </Show>
-            <button class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors">
-              <IconTag class="size-3.5 shrink-0" />
-              <span>Add label</span>
-            </button>
+            <SidebarCombobox
+              items={labelItems()}
+              selectedValue={selectedLabelIds()}
+              onSelect={handleLabelChange}
+              searchPlaceholder="Add labels..."
+              contentClass="w-56"
+              multiple={true}
+            >
+              <IconTag class="size-3.5 shrink-0 text-muted-foreground" />
+              <span class="text-muted-foreground">Add label</span>
+            </SidebarCombobox>
           </div>
         </Show>
       </div>
@@ -692,6 +848,7 @@ function IssueSidebar(props: IssueSidebarProps) {
       {/* Project Card */}
       <div class="rounded-xl bg-white/[0.04] overflow-hidden">
         <button
+          type="button"
           onclick={() => setProjectOpen((o) => !o)}
           class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -706,7 +863,10 @@ function IssueSidebar(props: IssueSidebarProps) {
 
         <Show when={projectOpen()}>
           <div class="px-2 pb-2">
-            <button class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors">
+            <button
+              type="button"
+              class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors"
+            >
               <IconProjects class="size-3.5 shrink-0" />
               <span>Add to project</span>
             </button>
@@ -731,9 +891,9 @@ function IssueSidebar(props: IssueSidebarProps) {
 
 function StatusBadge(props: { category: StatusCategory | null; name: string | null }) {
   const config: Record<string, { color: string; bg: string }> = {
-    backlog:   { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
+    backlog: { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
     unstarted: { color: "#9ca3af", bg: "rgba(156,163,175,0.12)" },
-    started:   { color: "#f97316", bg: "rgba(249,115,22,0.12)" },
+    started: { color: "#f97316", bg: "rgba(249,115,22,0.12)" },
     completed: { color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
     cancelled: { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
   }
@@ -750,9 +910,17 @@ function StatusBadge(props: { category: StatusCategory | null; name: string | nu
 
 function LinkIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -761,9 +929,17 @@ function LinkIcon(props: { class?: string }) {
 
 function TrashIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M3 6h18" />
       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -773,9 +949,17 @@ function TrashIcon(props: { class?: string }) {
 
 function SidebarLinkIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -784,9 +968,17 @@ function SidebarLinkIcon(props: { class?: string }) {
 
 function IdBadgeIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <rect x="2" y="4" width="20" height="16" rx="3" ry="3" />
       <path d="M9 10h.01" />
       <path d="M15 10h.01" />
@@ -797,9 +989,17 @@ function IdBadgeIcon(props: { class?: string }) {
 
 function GitBranchIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <line x1="6" y1="3" x2="6" y2="15" />
       <circle cx="18" cy="6" r="3" />
       <circle cx="6" cy="18" r="3" />
@@ -810,9 +1010,17 @@ function GitBranchIcon(props: { class?: string }) {
 
 function CursorPromptIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M5 3l14 9-7 1-3 7z" />
     </svg>
   )
@@ -820,9 +1028,17 @@ function CursorPromptIcon(props: { class?: string }) {
 
 function GearIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>

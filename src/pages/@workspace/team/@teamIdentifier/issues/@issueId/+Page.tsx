@@ -4,6 +4,7 @@ import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
 import TiptapEditor from "@/components/tiptap-editor"
 import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
+import { StatusIcon, PriorityIcon, StatusBadge } from "@/components/issue-fields"
 
 type StatusCategory = "backlog" | "unstarted" | "started" | "completed" | "cancelled"
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
@@ -42,11 +43,16 @@ type CommentRow = {
 
 function mapPriority(p: number): Priority {
   switch (p) {
-    case 1: return "urgent"
-    case 2: return "high"
-    case 3: return "medium"
-    case 4: return "low"
-    default: return "none"
+    case 1:
+      return "urgent"
+    case 2:
+      return "high"
+    case 3:
+      return "medium"
+    case 4:
+      return "low"
+    default:
+      return "none"
   }
 }
 
@@ -68,8 +74,11 @@ function formatDateTime(iso: string | null): string {
   if (!iso) return "—"
   const d = new Date(iso)
   if (isNaN(d.getTime())) return "—"
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-    " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+    " at " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  )
 }
 
 export default function IssueDetailPage() {
@@ -122,7 +131,8 @@ export default function IssueDetailPage() {
     () => [issue()?.id ?? ""]
   )
 
-  const issueIdentifier = () => issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
+  const issueIdentifier = () =>
+    issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
   const priority = () => mapPriority(issue()?.priority ?? 0)
   const statusCategory = () => issue()?.status_category ?? null
 
@@ -196,7 +206,9 @@ export default function IssueDetailPage() {
               {/* Main column */}
               <div class="flex-1 overflow-y-auto px-8 py-6 min-w-0">
                 <div class="flex items-center gap-2 mb-3">
-                  <span class="text-[12px] font-mono text-muted-foreground/60">{issueIdentifier()}</span>
+                  <span class="text-[12px] font-mono text-muted-foreground/60">
+                    {issueIdentifier()}
+                  </span>
                   <StatusBadge category={statusCategory()} name={iss().status_name} />
                 </div>
 
@@ -281,7 +293,7 @@ export default function IssueDetailPage() {
 
                 <MetaSection label="Priority">
                   <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04] cursor-pointer transition-colors -mx-2">
-                    <PriorityIcon priority={priority()} class="size-3.5 shrink-0" />
+                    <PriorityIcon value={priority()} class="size-3.5 shrink-0" />
                     <span class="text-[13px] text-foreground capitalize">
                       {priority() === "none" ? "No priority" : priority()}
                     </span>
@@ -303,9 +315,12 @@ export default function IssueDetailPage() {
 
                 <MetaSection label="Labels">
                   <div class="flex flex-wrap gap-1 px-2 -mx-2">
-                    <Show when={labels().length > 0} fallback={
-                      <span class="text-[12px] text-muted-foreground/50 py-1">No labels</span>
-                    }>
+                    <Show
+                      when={labels().length > 0}
+                      fallback={
+                        <span class="text-[12px] text-muted-foreground/50 py-1">No labels</span>
+                      }
+                    >
                       <For each={labels()}>
                         {(label) => (
                           <span class="text-[11px] px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground bg-secondary/30">
@@ -355,96 +370,19 @@ function MetaSection(props: { label: string; children: any }) {
   )
 }
 
-function StatusBadge(props: { category: StatusCategory | null; name: string | null }) {
-  const config: Record<string, { color: string; bg: string }> = {
-    backlog:   { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
-    unstarted: { color: "#9ca3af", bg: "rgba(156,163,175,0.12)" },
-    started:   { color: "#f97316", bg: "rgba(249,115,22,0.12)" },
-    completed: { color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
-    cancelled: { color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
-  }
-  const c = () => config[props.category ?? "backlog"] ?? config.backlog
-  return (
-    <span
-      class="text-[11px] px-2 py-0.5 rounded-full font-medium"
-      style={{ color: c().color, "background-color": c().bg }}
-    >
-      {props.name ?? props.category ?? "No status"}
-    </span>
-  )
-}
-
-function StatusIcon(props: { category: StatusCategory | null; class?: string }) {
-  switch (props.category) {
-    case "backlog":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-dasharray="3 2" />
-        </svg>
-      )
-    case "unstarted":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#9ca3af" stroke-width="1.5" fill="none" />
-        </svg>
-      )
-    case "started":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#f97316" stroke-width="1.5" fill="none" />
-          <path d="M8 1.5 A6.5 6.5 0 0 1 14.5 8" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-    case "completed":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#22c55e" stroke-width="1.5" fill="#22c55e" fill-opacity="0.15" />
-          <path d="M5 8 L7.2 10.2 L11 6" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        </svg>
-      )
-    case "cancelled":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" />
-          <path d="M5.5 5.5 L10.5 10.5 M10.5 5.5 L5.5 10.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-    default:
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-dasharray="3 2" />
-        </svg>
-      )
-  }
-}
-
-function PriorityIcon(props: { priority: Priority; class?: string }) {
-  const colors: Record<Priority, string> = {
-    urgent: "#ef4444",
-    high:   "#f97316",
-    medium: "#eab308",
-    low:    "#6b7280",
-    none:   "transparent",
-  }
-  return (
-    <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-      <Show when={props.priority !== "none"}>
-        <rect x="1" y="8" width="2.5" height="6" rx="0.5" fill={colors[props.priority]} opacity="0.5" />
-        <rect x="5" y="5" width="2.5" height="9" rx="0.5" fill={colors[props.priority]} opacity="0.7" />
-        <rect x="9" y="2" width="2.5" height="12" rx="0.5" fill={colors[props.priority]} />
-      </Show>
-      <Show when={props.priority === "none"}>
-        <circle cx="8" cy="8" r="2" fill="#4b5563" />
-      </Show>
-    </svg>
-  )
-}
-
 function LinkIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -453,9 +391,17 @@ function LinkIcon(props: { class?: string }) {
 
 function TrashIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M3 6h18" />
       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />

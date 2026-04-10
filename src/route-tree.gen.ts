@@ -33,7 +33,7 @@ const pageRoutes = [
   "/@workspace/teams",
   "/@workspace/view/@viewSlug",
   "/@workspace/views/issues",
-  "/@workspace/views/issues/new",
+  "/@workspace/views/new/@viewType",
   "/@workspace/views/projects",
   "/@workspace/welcome",
   "/forgot-password/verify",

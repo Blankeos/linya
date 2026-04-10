@@ -13,9 +13,9 @@ export const AppSchema = new Schema({
     icon_url: column.text, created_at: column.text, updated_at: column.text,
   }),
   user: new Table({
-    email: column.text, username: column.text,
+    email: column.text,
     display_name: column.text, avatar_url: column.text,
-    created_at: column.text, updated_at: column.text,
+    joined_at: column.text, updated_at: column.text,
   }),
   workspace_member: new Table({
     workspace_id: column.text, user_id: column.text,

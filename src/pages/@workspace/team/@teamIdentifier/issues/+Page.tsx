@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
+import { StatusIcon, PriorityIcon } from "@/components/issue-fields"
 
 function slugify(text: string) {
   return text
@@ -222,7 +223,7 @@ function IssueGroup(props: {
         onClick={() => setCollapsed((v) => !v)}
         class="flex items-center gap-2 w-full px-4 py-2 border-b border-border/20 bg-background/50 sticky top-0 hover:bg-white/[0.02] transition-colors"
       >
-        <StatusIcon status={props.status} class="size-3.5 shrink-0" />
+        <StatusIcon category={props.status} class="size-3.5 shrink-0" />
         <span class="text-[12px] font-medium text-muted-foreground">{props.label}</span>
         <span class="text-[11px] text-muted-foreground/50 bg-secondary/50 px-1.5 py-0.5 rounded-full">
           {props.issues.length}
@@ -252,8 +253,8 @@ function IssueRow(props: { issue: Issue; href: string }) {
       href={props.href}
       class="flex items-center gap-3 px-4 py-1.5 border-b border-border/30 hover:bg-white/[0.03] cursor-pointer group"
     >
-      <PriorityIcon priority={props.issue.priority} class="size-3.5 shrink-0" />
-      <StatusIcon status={props.issue.status} class="size-4 shrink-0" />
+      <PriorityIcon value={props.issue.priority} class="size-3.5 shrink-0" />
+      <StatusIcon category={props.issue.status} class="size-4 shrink-0" />
       <span class="text-[12px] text-muted-foreground/60 font-mono shrink-0 w-14">
         {props.issue.id}
       </span>
@@ -281,71 +282,20 @@ function IssueRow(props: { issue: Issue; href: string }) {
   )
 }
 
-function StatusIcon(props: { status: Status; class?: string }) {
-  switch (props.status) {
-    case "backlog":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-dasharray="3 2" />
-        </svg>
-      )
-    case "todo":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#9ca3af" stroke-width="1.5" fill="none" />
-        </svg>
-      )
-    case "in_progress":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#f97316" stroke-width="1.5" fill="none" />
-          <path d="M8 1.5 A6.5 6.5 0 0 1 14.5 8" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-    case "done":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#22c55e" stroke-width="1.5" fill="#22c55e" fill-opacity="0.15" />
-          <path d="M5 8 L7.2 10.2 L11 6" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        </svg>
-      )
-    case "cancelled":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" />
-          <path d="M5.5 5.5 L10.5 10.5 M10.5 5.5 L5.5 10.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-  }
-}
-
-function PriorityIcon(props: { priority: Priority; class?: string }) {
-  const colors: Record<Priority, string> = {
-    urgent: "#ef4444",
-    high: "#f97316",
-    medium: "#eab308",
-    low: "#6b7280",
-    none: "transparent",
-  }
-  return (
-    <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-      <Show when={props.priority !== "none"}>
-        <rect x="1" y="8" width="2.5" height="6" rx="0.5" fill={colors[props.priority]} opacity="0.5" />
-        <rect x="5" y="5" width="2.5" height="9" rx="0.5" fill={colors[props.priority]} opacity="0.7" />
-        <rect x="9" y="2" width="2.5" height="12" rx="0.5" fill={colors[props.priority]} />
-      </Show>
-      <Show when={props.priority === "none"}>
-        <circle cx="8" cy="8" r="2" fill="#4b5563" />
-      </Show>
-    </svg>
-  )
-}
-
 function ChevronRightIcon(props: { class?: string; style?: any }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} style={props.style} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      style={props.style}
+      aria-hidden="true"
+    >
       <path d="m9 18 6-6-6-6" />
     </svg>
   )
@@ -353,9 +303,17 @@ function ChevronRightIcon(props: { class?: string; style?: any }) {
 
 function ListViewIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <line x1="8" x2="21" y1="6" y2="6" />
       <line x1="8" x2="21" y1="12" y2="12" />
       <line x1="8" x2="21" y1="18" y2="18" />
@@ -368,9 +326,17 @@ function ListViewIcon(props: { class?: string }) {
 
 function BoardViewIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <rect width="7" height="9" x="3" y="3" rx="1" />
       <rect width="7" height="5" x="14" y="3" rx="1" />
       <rect width="7" height="9" x="14" y="12" rx="1" />
@@ -381,9 +347,17 @@ function BoardViewIcon(props: { class?: string }) {
 
 function FilterIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
     </svg>
   )
@@ -391,9 +365,17 @@ function FilterIcon(props: { class?: string }) {
 
 function PlusIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-      class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
       <path d="M5 12h14" />
       <path d="M12 5v14" />
     </svg>

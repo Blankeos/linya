@@ -5,6 +5,8 @@ import { useAuthContext } from "@/context/auth.context"
 import { useDisclosure } from "bagon-hooks"
 import { CommandMenu } from "@/components/command-menu"
 import { NewIssueModal } from "@/components/new-issue-modal"
+import { NewProjectModal } from "@/components/new-project-modal"
+import { newProjectOpen, setNewProjectOpen } from "@/stores/workspace-ui"
 import { DropdownMenuComp } from "@/components/ui/dropdown-menu"
 import { usePowerSyncQuery } from "@/lib/powersync"
 import {
@@ -407,6 +409,11 @@ export default function WorkspaceLayout(props: FlowProps) {
           <NewIssueModal
             open={newIssueOpen()}
             onClose={newIssueActions.close}
+            workspaceSlug={workspaceSlug()}
+          />
+          <NewProjectModal
+            open={newProjectOpen()}
+            onClose={() => setNewProjectOpen(false)}
             workspaceSlug={workspaceSlug()}
           />
         </div>

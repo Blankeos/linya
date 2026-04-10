@@ -5,7 +5,7 @@ streams:
   current_user:
     auto_subscribe: true
     query: |
-      SELECT id, email, display_name, avatar_url, created_at, updated_at
+      SELECT id, email, display_name, avatar_url, joined_at, updated_at
       FROM "user"
       WHERE id = auth.user_id()
 
@@ -19,7 +19,16 @@ streams:
         )
       - SELECT id, workspace_id, user_id, role, created_at
         FROM workspace_member
-        WHERE user_id = auth.user_id()
+        WHERE workspace_id IN (
+          SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+        )
+      - SELECT id, email, display_name, avatar_url, joined_at, updated_at
+        FROM "user"
+        WHERE id IN (
+          SELECT user_id FROM workspace_member WHERE workspace_id IN (
+            SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+          )
+        )
 
   team_data:
     auto_subscribe: true
