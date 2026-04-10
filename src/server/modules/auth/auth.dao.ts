@@ -165,6 +165,8 @@ export class AuthDAO {
           email: params.email,
           email_verified: true,
           password_hash: await hashPassword(generateId()),
+          display_name: params.metadata?.display_name ?? "",
+          avatar_url: params.metadata?.avatar_url ?? null,
           metadata: params.metadata ?? null,
         })
         .returningAll()

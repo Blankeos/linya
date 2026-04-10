@@ -1,12 +1,14 @@
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
+import { navigate } from "vike/client/router"
 import getTitle from "@/utils/get-title"
 import TiptapEditor from "@/components/tiptap-editor"
 import { usePowerSyncQuery, usePowerSyncExecute } from "@/lib/powersync"
 import { useAuthContext } from "@/context/auth.context"
 import {
   IconChevronDown,
+  IconChevronUp,
   IconPerson,
   IconTag,
   IconProjects,
@@ -42,6 +44,17 @@ import { Tippy } from "@/lib/solid-tippy"
 import { useHotkeys } from "bagon-hooks"
 import { toast } from "solid-sonner"
 import { Kbd } from "@/components/ui/kbd"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   makePriorityItems,
   makeStatusItems,
@@ -245,6 +258,56 @@ export default function IssueDetailPage() {
     () => []
   )
 
+  const [teamIssues] = usePowerSyncQuery<{
+    id: string
+    number: number
+    identifier: string
+    title: string
+  }>(
+    () => `
+      SELECT i.id, i.number, t.identifier as identifier, i.title
+      FROM issue i
+      LEFT JOIN team t ON i.team_id = t.id
+      WHERE t.identifier = ?
+      ORDER BY i.sort_order ASC, i.created_at DESC
+    `,
+    () => [teamIdentifier()]
+  )
+
+  const issuePosition = () => {
+    const iss = issue()
+    if (!iss) return { index: 0, total: 0 }
+    const issues = teamIssues()
+    const idx = issues.findIndex((row) => row.number === iss.number)
+    return { index: idx + 1, total: issues.length }
+  }
+
+  const prevIssue = () => {
+    const iss = issue()
+    if (!iss) return null
+    const issues = teamIssues()
+    const idx = issues.findIndex((row) => row.number === iss.number)
+    if (idx <= 0) return null
+    return issues[idx - 1]
+  }
+
+  const nextIssue = () => {
+    const iss = issue()
+    if (!iss) return null
+    const issues = teamIssues()
+    const idx = issues.findIndex((row) => row.number === iss.number)
+    if (idx < 0 || idx >= issues.length - 1) return null
+    return issues[idx + 1]
+  }
+
+  function navigateToIssue(dir: "prev" | "next") {
+    const target = dir === "prev" ? prevIssue() : nextIssue()
+    if (!target) return
+    navigate(
+      `/${workspaceSlug()}/issue/${target.identifier}-${target.number}/${slugify(target.title)}`
+    )
+  }
+
   const issueIdentifier = () =>
     issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
   const priority = () => mapPriority(issue()?.priority ?? 0)
@@ -264,6 +327,11 @@ export default function IssueDetailPage() {
   })
 
   const execute = usePowerSyncExecute()
+
+  useHotkeys([
+    ["k", () => navigateToIssue("prev")],
+    ["j", () => navigateToIssue("next")],
+  ])
 
   let titleTimer: ReturnType<typeof setTimeout> | undefined
   let descTimer: ReturnType<typeof setTimeout> | undefined
@@ -345,7 +413,7 @@ export default function IssueDetailPage() {
           <div class="flex flex-col h-full overflow-hidden">
             {/* Top bar */}
             <div class="flex items-center gap-2 px-4 py-2 border-b border-border/50 shrink-0">
-              <div class="flex items-center gap-1.5 text-[12px] text-muted-foreground flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 text-[12px] text-muted-foreground min-w-0">
                 <span class="truncate">{iss().team_name}</span>
                 <span class="text-muted-foreground/40 shrink-0">/</span>
                 <a
@@ -358,19 +426,26 @@ export default function IssueDetailPage() {
                 <span class="text-foreground shrink-0">{issueIdentifier()}</span>
               </div>
 
-              <div class="flex items-center gap-1.5 shrink-0">
+              <div class="flex items-center gap-1 shrink-0">
                 {/* Favorite Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsFavorite(!isFavorite())}
-                  class={cn(
-                    "p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors",
-                    isFavorite() && "text-yellow-500"
-                  )}
-                  title={isFavorite() ? "Remove from favorites" : "Add to favorites"}
+                <Tippy
+                  content={
+                    <span class="flex items-center gap-2">
+                      {isFavorite() ? "Remove from favorites" : "Add to favorites"}
+                    </span>
+                  }
                 >
-                  <IconStar class={cn("size-4", isFavorite() && "fill-current")} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFavorite(!isFavorite())}
+                    class={cn(
+                      "p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors",
+                      isFavorite() && "text-yellow-500"
+                    )}
+                  >
+                    <IconStar class={cn("size-4", isFavorite() && "fill-current")} />
+                  </button>
+                </Tippy>
 
                 {/* More Actions Dropdown */}
                 <DropdownMenu placement="bottom-end">
@@ -557,6 +632,49 @@ export default function IssueDetailPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </div>
+
+              <div class="flex-1" />
+
+              <div class="flex items-center gap-2 shrink-0 text-[12px] text-muted-foreground">
+                <span>
+                  <span class="text-foreground">{issuePosition().index}</span>
+                  <span class="text-muted-foreground/50"> / {issuePosition().total}</span>
+                </span>
+                <div class="flex items-center">
+                  <Tippy
+                    content={
+                      <span class="flex items-center gap-2">
+                        Navigate Up <Kbd>K</Kbd>
+                      </span>
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigateToIssue("prev")}
+                      disabled={!prevIssue()}
+                      class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      <IconChevronUp class="size-4" />
+                    </button>
+                  </Tippy>
+                  <Tippy
+                    content={
+                      <span class="flex items-center gap-2">
+                        Navigate Down <Kbd>J</Kbd>
+                      </span>
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigateToIssue("next")}
+                      disabled={!nextIssue()}
+                      class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      <IconChevronDown class="size-4" />
+                    </button>
+                  </Tippy>
+                </div>
               </div>
             </div>
 
