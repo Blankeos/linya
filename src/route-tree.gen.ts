@@ -31,6 +31,7 @@ const pageRoutes = [
   "/@workspace/teams",
   "/@workspace/view/@viewSlug",
   "/@workspace/views/issues",
+  "/@workspace/welcome",
   "/forgot-password/verify",
   "/login",
   "/onboarding",
