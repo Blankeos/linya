@@ -2,6 +2,7 @@ import { createSignal, For } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
+import TiptapEditor from "@/components/tiptap-editor"
 
 type Status = "backlog" | "todo" | "in_progress" | "done" | "cancelled"
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
@@ -133,17 +134,11 @@ export default function IssueDetailPage() {
           />
 
           <div class="mb-8">
-            <div class="min-h-[120px] text-[13px] text-foreground/80 leading-relaxed border border-border/30 rounded-md p-4 bg-secondary/10 focus-within:border-border transition-colors">
-              <textarea
-                class="w-full bg-transparent border-none outline-none resize-none text-[13px] text-foreground/80 leading-relaxed min-h-[100px] placeholder:text-muted-foreground/40"
-                value={ISSUE.description}
-                rows={12}
-                placeholder="Add description… (supports Markdown)"
-              />
-            </div>
-            <p class="text-[11px] text-muted-foreground/40 mt-1.5 px-1">
-              Tip: Markdown is supported.
-            </p>
+            <TiptapEditor
+              content={ISSUE.description}
+              placeholder="Add description… (type / for commands)"
+              editorClass="min-h-[120px]"
+            />
           </div>
 
           {/* Comments */}
@@ -174,12 +169,11 @@ export default function IssueDetailPage() {
                 <span class="text-[10px] font-medium text-primary">C</span>
               </div>
               <div class="flex-1">
-                <textarea
-                  value={comment()}
-                  onInput={(e) => setComment(e.currentTarget.value)}
+                <TiptapEditor
+                  variant="comment"
                   placeholder="Leave a comment…"
-                  rows={3}
-                  class="w-full bg-secondary/20 border border-border/40 rounded-md px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-border focus:ring-1 focus:ring-ring/30 resize-none transition-colors"
+                  onChange={(html) => setComment(html)}
+                  editorClass="min-h-[60px] text-[13px]"
                 />
                 <div class="flex justify-end mt-2">
                   <button

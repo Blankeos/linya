@@ -2,91 +2,83 @@ import { createSignal, For, Show } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
+import { usePowerSyncQuery } from "@/lib/powersync"
+import { useAuthContext } from "@/context/auth.context"
 
 type Status = "backlog" | "todo" | "in_progress" | "done" | "cancelled"
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
 
-type Issue = {
+type IssueQueryRow = {
   id: string
   title: string
-  status: Status
-  priority: Priority
-  assigneeInitials: string
-  dueDate: string | null
-  labels: string[]
+  priority: number
+  due_date: string | null
+  number: number
+  team_identifier: string
+  status_category: string | null
+  labels: string | null
 }
 
-const PLACEHOLDER_ISSUES: Issue[] = [
-  {
-    id: "ENG-1",
-    title: "Set up authentication with email/password and OAuth",
-    status: "done",
-    priority: "urgent",
-    assigneeInitials: "C",
-    dueDate: "Apr 12",
-    labels: ["Auth"],
-  },
-  {
-    id: "ENG-2",
-    title: "Design and implement sidebar navigation shell",
-    status: "in_progress",
-    priority: "high",
-    assigneeInitials: "C",
-    dueDate: "Apr 15",
-    labels: ["UI"],
-  },
-  {
-    id: "ENG-3",
-    title: "Create issue list view with filters and sorting",
-    status: "in_progress",
-    priority: "high",
-    assigneeInitials: "C",
-    dueDate: "Apr 18",
-    labels: ["UI", "Issues"],
-  },
-  {
-    id: "ENG-4",
-    title: "Implement issue detail page with metadata panel",
-    status: "todo",
-    priority: "medium",
-    assigneeInitials: "C",
-    dueDate: "Apr 22",
-    labels: ["UI", "Issues"],
-  },
-  {
-    id: "ENG-5",
-    title: "Add PowerSync integration for real-time sync",
-    status: "todo",
-    priority: "medium",
-    assigneeInitials: "C",
-    dueDate: null,
-    labels: ["Backend", "Sync"],
-  },
-  {
-    id: "ENG-6",
-    title: "Build onboarding flow for workspace + team creation",
-    status: "backlog",
-    priority: "low",
-    assigneeInitials: "C",
-    dueDate: null,
-    labels: ["Onboarding"],
-  },
-  {
-    id: "ENG-7",
-    title: "Set up S3 storage for file attachments",
-    status: "backlog",
-    priority: "low",
-    assigneeInitials: "C",
-    dueDate: null,
-    labels: ["Backend"],
-  },
-]
+function mapPriority(p: number): Priority {
+  switch (p) {
+    case 1: return "urgent"
+    case 2: return "high"
+    case 3: return "medium"
+    case 4: return "low"
+    default: return "none"
+  }
+}
+
+function mapStatus(category: string | null): Status {
+  switch (category) {
+    case "backlog": return "backlog"
+    case "unstarted": return "todo"
+    case "started": return "in_progress"
+    case "completed": return "done"
+    case "cancelled": return "cancelled"
+    default: return "backlog"
+  }
+}
+
+function formatDueDate(date: string | null): string | null {
+  if (!date) return null
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
 
 export default function MyIssuesPage() {
   useMetadata({ title: getTitle("My Issues") })
   const pageCtx = usePageContext()
+  const auth = useAuthContext()
   const workspaceSlug = () => (pageCtx.routeParams as Record<string, string>).workspace ?? ""
   const [view, setView] = createSignal<"list" | "board">("list")
+
+  const [issues] = usePowerSyncQuery<IssueQueryRow>(
+    () => `
+      SELECT
+        i.id,
+        i.title,
+        i.priority,
+        i.due_date,
+        i.number,
+        i.sort_order,
+        t.identifier as team_identifier,
+        ws.category as status_category,
+        (
+          SELECT GROUP_CONCAT(l.name, ',')
+          FROM issue_label il
+          JOIN label l ON il.label_id = l.id
+          WHERE il.issue_id = i.id
+        ) as labels
+      FROM issue i
+      LEFT JOIN team t ON i.team_id = t.id
+      LEFT JOIN workflow_status ws ON i.status_id = ws.id
+      WHERE i.assignee_id = ?
+      ORDER BY i.sort_order ASC, i.created_at DESC
+    `,
+    () => [auth.user()?.id ?? ""]
+  )
 
   return (
     <div class="flex flex-col h-full overflow-hidden">
@@ -136,7 +128,7 @@ export default function MyIssuesPage() {
       {/* Issue list */}
       <div class="flex-1 overflow-y-auto">
         <Show
-          when={PLACEHOLDER_ISSUES.length > 0}
+          when={issues().length > 0}
           fallback={
             <div class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <span class="text-[32px]">—</span>
@@ -148,14 +140,19 @@ export default function MyIssuesPage() {
             <div class="flex items-center gap-2 px-4 py-2 border-b border-border/20 bg-background/50 sticky top-0">
               <span class="text-[12px] font-medium text-muted-foreground">All issues</span>
               <span class="text-[11px] text-muted-foreground/50 bg-secondary/50 px-1.5 py-0.5 rounded-full">
-                {PLACEHOLDER_ISSUES.length}
+                {issues().length}
               </span>
             </div>
-            <For each={PLACEHOLDER_ISSUES}>
-              {(issue) => (
+            <For each={issues()}>
+              {(row) => (
                 <IssueRow
-                  issue={issue}
-                  href={`/${workspaceSlug()}/team/ENG/issues/${issue.id}`}
+                  issueId={`${row.team_identifier}-${row.number}`}
+                  title={row.title}
+                  status={mapStatus(row.status_category)}
+                  priority={mapPriority(row.priority)}
+                  dueDate={formatDueDate(row.due_date)}
+                  labels={row.labels ? row.labels.split(",").filter(Boolean) : []}
+                  href={`/${workspaceSlug()}/team/${row.team_identifier}/issues/${row.team_identifier}-${row.number}`}
                 />
               )}
             </For>
@@ -166,21 +163,29 @@ export default function MyIssuesPage() {
   )
 }
 
-function IssueRow(props: { issue: Issue; href: string }) {
+function IssueRow(props: {
+  issueId: string
+  title: string
+  status: Status
+  priority: Priority
+  dueDate: string | null
+  labels: string[]
+  href: string
+}) {
   return (
     <a
       href={props.href}
       class="flex items-center gap-3 px-4 py-1.5 border-b border-border/30 hover:bg-white/[0.03] cursor-pointer group"
     >
-      <PriorityIcon priority={props.issue.priority} class="size-3.5 shrink-0" />
-      <StatusIcon status={props.issue.status} class="size-4 shrink-0" />
+      <PriorityIcon priority={props.priority} class="size-3.5 shrink-0" />
+      <StatusIcon status={props.status} class="size-4 shrink-0" />
       <span class="text-[12px] text-muted-foreground/60 font-mono shrink-0 w-12">
-        {props.issue.id}
+        {props.issueId}
       </span>
-      <span class="text-[13px] text-foreground flex-1 truncate">{props.issue.title}</span>
-      <Show when={props.issue.labels.length > 0}>
+      <span class="text-[13px] text-foreground flex-1 truncate">{props.title}</span>
+      <Show when={props.labels.length > 0}>
         <div class="hidden sm:flex items-center gap-1 shrink-0">
-          <For each={props.issue.labels}>
+          <For each={props.labels}>
             {(label) => (
               <span class="text-[11px] px-1.5 py-0.5 rounded-full border border-border/50 text-muted-foreground/70">
                 {label}
@@ -189,14 +194,11 @@ function IssueRow(props: { issue: Issue; href: string }) {
           </For>
         </div>
       </Show>
-      <Show when={props.issue.dueDate}>
+      <Show when={props.dueDate}>
         <span class="text-[11px] text-muted-foreground/60 shrink-0 hidden md:block">
-          {props.issue.dueDate}
+          {props.dueDate}
         </span>
       </Show>
-      <div class="size-5 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-        <span class="text-[9px] font-medium text-primary">{props.issue.assigneeInitials}</span>
-      </div>
     </a>
   )
 }

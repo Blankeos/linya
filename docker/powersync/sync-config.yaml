@@ -1,9 +1,82 @@
 config:
   edition: 3
 
-# TODO: Expand sync rules as tables are built out.
 streams:
   current_user:
     auto_subscribe: true
+    query: |
+      SELECT id, email, display_name, avatar_url, created_at, updated_at
+      FROM "user"
+      WHERE id = auth.user_id()
+
+  workspace_data:
+    auto_subscribe: true
     queries:
-      - SELECT id, email, display_name, avatar_url FROM "user"
+      - SELECT id, name, slug, icon_url, created_at, updated_at
+        FROM workspace
+        WHERE id IN (
+          SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+        )
+      - SELECT id, workspace_id, user_id, role, created_at
+        FROM workspace_member
+        WHERE user_id = auth.user_id()
+
+  team_data:
+    auto_subscribe: true
+    with:
+      my_workspaces: SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+    queries:
+      - SELECT id, workspace_id, name, identifier, description, icon, color,
+               is_private, timezone, parent_team_id, created_at, updated_at
+        FROM team
+        WHERE workspace_id IN my_workspaces
+      - SELECT id, workspace_id, team_id, name, color, description,
+               parent_label_id, created_at
+        FROM label
+        WHERE workspace_id IN my_workspaces
+
+  team_member_data:
+    auto_subscribe: true
+    query: |
+      SELECT id, team_id, user_id, role, created_at
+      FROM team_member
+      WHERE team_id IN (
+        SELECT id FROM team WHERE workspace_id IN (
+          SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+        )
+      )
+
+  workflow_status_data:
+    auto_subscribe: true
+    query: |
+      SELECT id, team_id, name, color, category, position, is_default, created_at
+      FROM workflow_status
+      WHERE team_id IN (
+        SELECT id FROM team WHERE workspace_id IN (
+          SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+        )
+      )
+
+  issue_data:
+    auto_subscribe: true
+    queries:
+      - SELECT id, team_id, number, title, description, description_html,
+               status_id, priority, assignee_id, creator_id, project_id,
+               cycle_id, parent_issue_id, estimate, due_date, sort_order,
+               is_triaged, snoozed_until, started_at, completed_at, cancelled_at,
+               created_at, updated_at
+        FROM issue
+        WHERE team_id IN (
+          SELECT id FROM team WHERE workspace_id IN (
+            SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+          )
+        )
+      - SELECT id, issue_id, label_id
+        FROM issue_label
+        WHERE issue_id IN (
+          SELECT id FROM issue WHERE team_id IN (
+            SELECT id FROM team WHERE workspace_id IN (
+              SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+            )
+          )
+        )

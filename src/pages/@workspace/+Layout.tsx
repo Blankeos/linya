@@ -6,6 +6,7 @@ import { useDisclosure } from "bagon-hooks"
 import { CommandMenu } from "@/components/command-menu"
 import { NewIssueModal } from "@/components/new-issue-modal"
 import { DropdownMenuComp } from "@/components/ui/dropdown-menu"
+import { usePowerSyncQuery } from "@/lib/powersync"
 import {
   IconPulse,
   IconInbox,
@@ -35,6 +36,17 @@ export default function WorkspaceLayout(props: FlowProps) {
   const [workspaceExpanded, setWorkspaceExpanded] = createSignal(true)
   const [favoritesExpanded, setFavoritesExpanded] = createSignal(true)
   const [teamsExpanded, setTeamsExpanded] = createSignal(true)
+
+  const [sidebarTeams] = usePowerSyncQuery<{ id: string; name: string; identifier: string; color: string | null }>(
+    () => `
+      SELECT t.id, t.name, t.identifier, t.color
+      FROM team t
+      JOIN workspace w ON t.workspace_id = w.id
+      WHERE w.slug = ?
+      ORDER BY t.name ASC
+    `,
+    () => [workspaceSlug()]
+  )
 
   const isActive = (path: string) => {
     const urlPath = pageCtx.urlPathname
@@ -327,9 +339,31 @@ export default function WorkspaceLayout(props: FlowProps) {
                 </button>
                 <Show when={teamsExpanded()}>
                   <div class="mt-0.5 space-y-0.5">
-                    <div class="px-2 py-1.5 text-[12px] text-muted-foreground/50 italic">
-                      No teams yet
-                    </div>
+                    <Show
+                      when={sidebarTeams().length > 0}
+                      fallback={
+                        <div class="px-2 py-1.5 text-[12px] text-muted-foreground/50 italic">
+                          No teams yet
+                        </div>
+                      }
+                    >
+                      <For each={sidebarTeams()}>
+                        {(team) => (
+                          <a
+                            href={`/${workspaceSlug()}/team/${team.identifier}/issues`}
+                            class={navItemClass(`/${workspaceSlug()}/team/${team.identifier}`)}
+                          >
+                            <div
+                              class="size-4 rounded flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
+                              style={{ "background-color": team.color ?? "#6b7280" }}
+                            >
+                              {team.name[0]?.toUpperCase()}
+                            </div>
+                            {team.name}
+                          </a>
+                        )}
+                      </For>
+                    </Show>
                   </div>
                 </Show>
               </div>

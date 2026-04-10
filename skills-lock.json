@@ -5,6 +5,11 @@
       "source": "blankeos/iconmate",
       "sourceType": "github",
       "computedHash": "7eee9ca3a8df957aef1bede987f471b8d2771a4ff9705c2f389200d69472a871"
+    },
+    "powersync": {
+      "source": "powersync-ja/agent-skills",
+      "sourceType": "github",
+      "computedHash": "b84bf1780055522a7310be01637a5a6c4200dab2e8625ea1c2fa5544c2950b88"
     }
   }
 }
