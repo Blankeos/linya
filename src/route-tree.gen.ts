@@ -30,6 +30,8 @@ const pageRoutes = [
   "/@workspace/team/@teamIdentifier/cycles",
   "/@workspace/team/@teamIdentifier/issues",
   "/@workspace/team/@teamIdentifier/issues/@issueId",
+  "/@workspace/team/@teamIdentifier/projects/all",
+  "/@workspace/team/@teamIdentifier/views/issues",
   "/@workspace/teams",
   "/@workspace/view/@viewSlug",
   "/@workspace/views/issues",

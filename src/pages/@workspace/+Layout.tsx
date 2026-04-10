@@ -36,6 +36,7 @@ import {
   IconBell,
   IconSlack,
   IconEllipsis,
+  IconPlus,
 } from "@/assets/icons"
 
 // Team Accordion Item Component
@@ -68,7 +69,7 @@ function TeamAccordionItem(props: {
       <div class="flex items-center">
         <button
           type="button"
-          class="flex-1 flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors select-none text-muted-foreground hover:text-foreground hover:bg-white/5"
+          class="flex-1 flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors select-none text-muted-foreground hover:text-foreground"
           onClick={() => setIsExpanded((v) => !v)}
         >
           <IconChevronRight
@@ -184,13 +185,19 @@ function TeamAccordionItem(props: {
             <IconCircleDot class="size-3.5 shrink-0" />
             Issues
           </a>
-          <a href={`${teamBasePath()}/backlog`} class={subItemClass(`${teamBasePath()}/backlog`)}>
+          <a
+            href={`${teamBasePath()}/projects/all`}
+            class={subItemClass(`${teamBasePath()}/projects`)}
+          >
             <IconBox class="size-3.5 shrink-0" />
-            Backlog
+            Projects
           </a>
-          <a href={`${teamBasePath()}/cycles`} class={subItemClass(`${teamBasePath()}/cycles`)}>
+          <a
+            href={`${teamBasePath()}/views/issues`}
+            class={subItemClass(`${teamBasePath()}/views`)}
+          >
             <IconLayers class="size-3.5 shrink-0" />
-            Cycles
+            Views
           </a>
         </div>
       </Show>

@@ -28,6 +28,6 @@ export default function RootLayout(props: FlowProps) {
 }
 
 function _Toaster() {
-  const { inferredTheme } = useThemeContext()
-  return <Toaster theme={inferredTheme()} richColors />
+  const { intrinsicTheme } = useThemeContext()
+  return <Toaster theme={intrinsicTheme()} richColors />
 }
