@@ -5,6 +5,41 @@ import getTitle from "@/utils/get-title"
 import TiptapEditor from "@/components/tiptap-editor"
 import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
 import { StatusIcon, PriorityIcon, StatusBadge } from "@/components/issue-fields"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  IconStar,
+  IconMoreHorizontal,
+  IconCalendarPlus,
+  IconLink,
+  IconFilePlus,
+  IconArrowRightLeft,
+  IconCopy,
+  IconFlag,
+  IconGitBranchPlus,
+  IconBellOff,
+  IconClipboardCopy,
+  IconHash,
+  IconLink2,
+  IconType,
+  IconFileText,
+  IconFileCode,
+  IconGitBranch,
+  IconSparkles,
+  IconClock,
+  IconHistory,
+  IconTrash2,
+} from "@/assets/icons"
+import { cn } from "@/utils/cn"
 
 type StatusCategory = "backlog" | "unstarted" | "started" | "completed" | "cancelled"
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
@@ -140,11 +175,34 @@ export default function IssueDetailPage() {
 
   const [comment, setComment] = createSignal("")
   const [copied, setCopied] = createSignal(false)
+  const [isFavorite, setIsFavorite] = createSignal(false)
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(issue()?.id ?? "")
+  }
+
+  const handleCopyTitle = () => {
+    navigator.clipboard.writeText(issue()?.title ?? "")
+  }
+
+  const handleCopyTitleAsLink = () => {
+    navigator.clipboard.writeText(`[${issueIdentifier()}](${window.location.href})`)
+  }
+
+  const handleCopyDescription = () => {
+    navigator.clipboard.writeText(issue()?.description ?? "")
+  }
+
+  const handleCopyBranchName = () => {
+    navigator.clipboard.writeText(
+      `${issueIdentifier()}-${issue()?.title?.toLowerCase().replace(/\s+/g, "-") ?? ""}`
+    )
   }
 
   return (
@@ -183,21 +241,204 @@ export default function IssueDetailPage() {
               </div>
 
               <div class="flex items-center gap-1.5 shrink-0">
+                {/* Favorite Button */}
                 <button
                   type="button"
-                  onClick={handleCopyLink}
-                  class="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border/60 text-[12px] text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                  onClick={() => setIsFavorite(!isFavorite())}
+                  class={cn(
+                    "p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors",
+                    isFavorite() && "text-yellow-500"
+                  )}
+                  title={isFavorite() ? "Remove from favorites" : "Add to favorites"}
                 >
-                  <LinkIcon class="size-3.5" />
-                  {copied() ? "Copied!" : "Copy link"}
+                  <IconStar class={cn("size-4", isFavorite() && "fill-current")} />
                 </button>
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 px-2.5 py-1 rounded border border-destructive/40 text-[12px] text-destructive/80 hover:text-destructive hover:border-destructive transition-colors"
-                >
-                  <TrashIcon class="size-3.5" />
-                  Delete
-                </button>
+
+                {/* More Actions Dropdown */}
+                <DropdownMenu placement="bottom-end">
+                  <DropdownMenuTrigger
+                    class="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+                    aria-label="More actions"
+                  >
+                    <IconMoreHorizontal class="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent class="w-60">
+                    {/* Set due date */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconCalendarPlus class="size-4 text-muted-foreground" />
+                      Set due date
+                      <DropdownMenuShortcut>⇧ D</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Add link */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconLink class="size-4 text-muted-foreground" />
+                      Add link…
+                      <DropdownMenuShortcut>⌃ L</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    {/* Add document */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconFilePlus class="size-4 text-muted-foreground" />
+                      Add document…
+                    </DropdownMenuItem>
+
+                    {/* Convert into */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconArrowRightLeft class="size-4 text-muted-foreground" />
+                        Convert into
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-48">
+                        <DropdownMenuItem class="gap-2">
+                          <IconGitBranchPlus class="size-4 text-muted-foreground" />
+                          Sub-issue
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2">
+                          <IconCopy class="size-4 text-muted-foreground" />
+                          Duplicate issue
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    {/* Make a copy */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconCopy class="size-4 text-muted-foreground" />
+                      Make a copy…
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Mark as */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconFlag class="size-4 text-muted-foreground" />
+                        Mark as
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-32">
+                        <DropdownMenuItem>In progress</DropdownMenuItem>
+                        <DropdownMenuItem>Done</DropdownMenuItem>
+                        <DropdownMenuItem>Cancelled</DropdownMenuItem>
+                        <DropdownMenuItem>Backlog</DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    {/* Create related */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconGitBranchPlus class="size-4 text-muted-foreground" />
+                        Create related
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-40">
+                        <DropdownMenuItem>Sub-issue</DropdownMenuItem>
+                        <DropdownMenuItem>Duplicate issue</DropdownMenuItem>
+                        <DropdownMenuItem>Related issue</DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Unsubscribe */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconBellOff class="size-4 text-muted-foreground" />
+                      Unsubscribe
+                      <DropdownMenuShortcut>⌥ S</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    {/* Favorite */}
+                    <DropdownMenuItem class="gap-2" onSelect={() => setIsFavorite(!isFavorite())}>
+                      <IconStar class="size-4 text-muted-foreground" />
+                      {isFavorite() ? "Unfavorite" : "Favorite"}
+                      <DropdownMenuShortcut>⌥ F</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Copy submenu */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconClipboardCopy class="size-4 text-muted-foreground" />
+                        Copy
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-52">
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyId}>
+                          <IconHash class="size-4 text-muted-foreground" />
+                          Copy ID
+                          <DropdownMenuShortcut>⌘ .</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyLink}>
+                          <IconLink2 class="size-4 text-muted-foreground" />
+                          Copy URL
+                          <DropdownMenuShortcut>⌘ ⇧ ,</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyTitle}>
+                          <IconType class="size-4 text-muted-foreground" />
+                          Copy title
+                          <DropdownMenuShortcut>⌘ ⇧ '</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyTitleAsLink}>
+                          <IconLink class="size-4 text-muted-foreground" />
+                          Copy title as link
+                          <DropdownMenuShortcut>⌘ ⇧ C</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyDescription}>
+                          <IconFileText class="size-4 text-muted-foreground" />
+                          Copy description as Markdown
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyDescription}>
+                          <IconFileCode class="size-4 text-muted-foreground" />
+                          Copy content as Markdown
+                          <DropdownMenuShortcut>⌘ ⌥ C</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem class="gap-2" onSelect={handleCopyBranchName}>
+                          <IconGitBranch class="size-4 text-muted-foreground" />
+                          Copy git branch name
+                          <DropdownMenuShortcut>⌘ ⇧ .</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem class="gap-2">
+                          <IconSparkles class="size-4 text-muted-foreground" />
+                          Copy as prompt
+                          <DropdownMenuShortcut>⌘ ⌥ P</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    {/* Remind me */}
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger class="gap-2">
+                        <IconClock class="size-4 text-muted-foreground" />
+                        Remind me
+                        <DropdownMenuShortcut>⇧ H</DropdownMenuShortcut>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-40">
+                        <DropdownMenuItem>Later today</DropdownMenuItem>
+                        <DropdownMenuItem>Tomorrow</DropdownMenuItem>
+                        <DropdownMenuItem>Next week</DropdownMenuItem>
+                        <DropdownMenuItem>In 2 weeks</DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Show version history */}
+                    <DropdownMenuItem class="gap-2">
+                      <IconHistory class="size-4 text-muted-foreground" />
+                      Show version history
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Delete */}
+                    <DropdownMenuItem class="gap-2 text-destructive focus:text-destructive focus:bg-destructive/10">
+                      <IconTrash2 class="size-4" />
+                      Delete
+                      <DropdownMenuShortcut>⌘ ⌫</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 

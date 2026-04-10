@@ -27,7 +27,176 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconCustomizeSidebar,
+  IconCircleDot,
+  IconBox,
+  IconLayers,
+  IconSettings,
+  IconLink,
+  IconArchive,
+  IconBell,
+  IconSlack,
+  IconEllipsis,
 } from "@/assets/icons"
+
+// Team Accordion Item Component
+type Team = {
+  id: string
+  name: string
+  identifier: string
+  color: string | null
+}
+
+function TeamAccordionItem(props: {
+  team: Team
+  workspaceSlug: string
+  isActive: (path: string) => boolean
+}) {
+  const [isExpanded, setIsExpanded] = createSignal(true)
+
+  const teamBasePath = () => `/${props.workspaceSlug}/team/${props.team.identifier}`
+
+  const subItemClass = (path: string) =>
+    `flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors w-full select-none ml-6 ${
+      props.isActive(path)
+        ? "bg-white/[0.08] text-foreground"
+        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+    }`
+
+  return (
+    <div class="group">
+      {/* Team Header with context menu */}
+      <div class="flex items-center">
+        <button
+          type="button"
+          class="flex-1 flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors select-none text-muted-foreground hover:text-foreground hover:bg-white/5"
+          onClick={() => setIsExpanded((v) => !v)}
+        >
+          <IconChevronRight
+            class="size-3 transition-transform shrink-0"
+            style={{ transform: isExpanded() ? "rotate(90deg)" : "rotate(0deg)" }}
+          />
+          <div
+            class="size-4 rounded flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
+            style={{ "background-color": props.team.color ?? "#6b7280" }}
+          >
+            {props.team.name[0]?.toUpperCase()}
+          </div>
+          <span class="flex-1 truncate text-left">{props.team.name}</span>
+        </button>
+
+        {/* Context menu button - visible on hover */}
+        <DropdownMenuComp
+          options={[
+            {
+              type: "item",
+              itemDisplay: (
+                <span class="flex items-center gap-2">
+                  <IconSettings class="size-4 text-muted-foreground" />
+                  Team settings
+                </span>
+              ),
+              itemOnSelect: () =>
+                navigate(`/${props.workspaceSlug}/team/${props.team.identifier}/settings`),
+            },
+            {
+              type: "item",
+              itemDisplay: (
+                <span class="flex items-center gap-2">
+                  <IconLink class="size-4 text-muted-foreground" />
+                  Copy link
+                </span>
+              ),
+              itemOnSelect: () => {
+                navigator.clipboard.writeText(
+                  `https://linear.app/${props.workspaceSlug}/team/${props.team.identifier}`
+                )
+              },
+            },
+            {
+              type: "item",
+              itemDisplay: (
+                <span class="flex items-center gap-2">
+                  <IconArchive class="size-4 text-muted-foreground" />
+                  Open archive
+                </span>
+              ),
+              itemOnSelect: () => navigate(`${teamBasePath()}/backlog`),
+            },
+            { type: "separator" },
+            {
+              type: "sub",
+              subTrigger: (
+                <span class="flex items-center gap-2">
+                  <IconBell class="size-4 text-muted-foreground" />
+                  Subscribe
+                </span>
+              ),
+              subOptions: [
+                {
+                  type: "item",
+                  itemDisplay: "All activity",
+                  itemOnSelect: () => {},
+                },
+                {
+                  type: "item",
+                  itemDisplay: "Only issues I'm involved in",
+                  itemOnSelect: () => {},
+                },
+                {
+                  type: "item",
+                  itemDisplay: "Unsubscribe",
+                  itemOnSelect: () => {},
+                },
+              ],
+            },
+            {
+              type: "item",
+              itemDisplay: (
+                <span class="flex items-center gap-2">
+                  <IconSlack class="size-4 text-muted-foreground" />
+                  Configure Slack notifications...
+                </span>
+              ),
+              itemOnSelect: () => {},
+            },
+            { type: "separator" },
+            {
+              type: "item",
+              itemDisplay: (
+                <span class="flex items-center gap-2 text-destructive">Leave team...</span>
+              ),
+              itemOnSelect: () => {},
+            },
+          ]}
+          triggerProps={{
+            class:
+              "p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity cursor-pointer",
+          }}
+        >
+          <IconEllipsis class="size-3.5 text-muted-foreground" />
+        </DropdownMenuComp>
+      </div>
+
+      {/* Sub-items - Issues, Projects, Views */}
+      <Show when={isExpanded()}>
+        <div class="mt-0.5 space-y-0.5">
+          <a href={`${teamBasePath()}/issues`} class={subItemClass(`${teamBasePath()}/issues`)}>
+            <IconCircleDot class="size-3.5 shrink-0" />
+            Issues
+          </a>
+          <a href={`${teamBasePath()}/backlog`} class={subItemClass(`${teamBasePath()}/backlog`)}>
+            <IconBox class="size-3.5 shrink-0" />
+            Backlog
+          </a>
+          <a href={`${teamBasePath()}/cycles`} class={subItemClass(`${teamBasePath()}/cycles`)}>
+            <IconLayers class="size-3.5 shrink-0" />
+            Cycles
+          </a>
+        </div>
+      </Show>
+    </div>
+  )
+}
 
 export default function WorkspaceLayout(props: FlowProps) {
   const auth = useAuthContext()
@@ -333,17 +502,26 @@ export default function WorkspaceLayout(props: FlowProps) {
 
               {/* Your teams section */}
               <div class="pt-4">
-                <button
-                  type="button"
-                  class={sectionHeaderClass}
-                  onClick={() => setTeamsExpanded((v) => !v)}
-                >
-                  <IconChevronRight
-                    class="size-3 transition-transform"
-                    style={{ transform: teamsExpanded() ? "rotate(90deg)" : "rotate(0deg)" }}
-                  />
-                  Your teams
-                </button>
+                <div class="flex items-center justify-between">
+                  <button
+                    type="button"
+                    class={sectionHeaderClass}
+                    onClick={() => setTeamsExpanded((v) => !v)}
+                  >
+                    <IconChevronRight
+                      class="size-3 transition-transform"
+                      style={{ transform: teamsExpanded() ? "rotate(90deg)" : "rotate(0deg)" }}
+                    />
+                    Your teams
+                  </button>
+                  <button
+                    type="button"
+                    class="p-1 rounded opacity-0 hover:opacity-100 hover:bg-white/10 transition-opacity cursor-pointer mr-1"
+                    aria-label="Add team"
+                  >
+                    <IconPlus class="size-3.5 text-muted-foreground" />
+                  </button>
+                </div>
                 <Show when={teamsExpanded()}>
                   <div class="mt-0.5 space-y-0.5">
                     <Show
@@ -356,18 +534,11 @@ export default function WorkspaceLayout(props: FlowProps) {
                     >
                       <For each={sidebarTeams()}>
                         {(team) => (
-                          <a
-                            href={`/${workspaceSlug()}/team/${team.identifier}/issues`}
-                            class={navItemClass(`/${workspaceSlug()}/team/${team.identifier}`)}
-                          >
-                            <div
-                              class="size-4 rounded flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
-                              style={{ "background-color": team.color ?? "#6b7280" }}
-                            >
-                              {team.name[0]?.toUpperCase()}
-                            </div>
-                            {team.name}
-                          </a>
+                          <TeamAccordionItem
+                            team={team}
+                            workspaceSlug={workspaceSlug()}
+                            isActive={isActive}
+                          />
                         )}
                       </For>
                     </Show>
