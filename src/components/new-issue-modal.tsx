@@ -1,7 +1,19 @@
 import { createEffect, createSignal, type JSX, Show } from "solid-js"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  IconCalendar,
+  IconCustomers,
+  IconLink,
+  IconMaximize,
+  IconMinimize,
+  IconMore,
+  IconPerson,
+  IconProjects,
+  IconRepeat,
+  IconSubIssue,
+  IconTag,
+} from "@/assets/icons"
 import { Combobox2Command, type ComboboxItem } from "@/components/ui/combobox-2"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,28 +22,51 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { honoClient } from "@/lib/hono-client"
-import {
-  IconPerson,
-  IconProjects,
-  IconTag,
-  IconMaximize,
-  IconMinimize,
-  IconMore,
-  IconCalendar,
-  IconRepeat,
-  IconLink,
-  IconCustomers,
-  IconSubIssue,
-} from "@/assets/icons"
 import { cn } from "@/utils/cn"
 
 const PRIORITIES: ComboboxItem[] = [
-  { value: "0", label: <span class="flex items-center gap-2"><PriorityIcon value={0} class="size-3.5 shrink-0" /> No priority</span> },
-  { value: "1", label: <span class="flex items-center gap-2"><PriorityIcon value={1} class="size-3.5 shrink-0" /> Urgent</span> },
-  { value: "2", label: <span class="flex items-center gap-2"><PriorityIcon value={2} class="size-3.5 shrink-0" /> High</span> },
-  { value: "3", label: <span class="flex items-center gap-2"><PriorityIcon value={3} class="size-3.5 shrink-0" /> Medium</span> },
-  { value: "4", label: <span class="flex items-center gap-2"><PriorityIcon value={4} class="size-3.5 shrink-0" /> Low</span> },
+  {
+    value: "0",
+    label: (
+      <span class="flex items-center gap-2">
+        <PriorityIcon value={0} class="size-3.5 shrink-0" /> No priority
+      </span>
+    ),
+  },
+  {
+    value: "1",
+    label: (
+      <span class="flex items-center gap-2">
+        <PriorityIcon value={1} class="size-3.5 shrink-0" /> Urgent
+      </span>
+    ),
+  },
+  {
+    value: "2",
+    label: (
+      <span class="flex items-center gap-2">
+        <PriorityIcon value={2} class="size-3.5 shrink-0" /> High
+      </span>
+    ),
+  },
+  {
+    value: "3",
+    label: (
+      <span class="flex items-center gap-2">
+        <PriorityIcon value={3} class="size-3.5 shrink-0" /> Medium
+      </span>
+    ),
+  },
+  {
+    value: "4",
+    label: (
+      <span class="flex items-center gap-2">
+        <PriorityIcon value={4} class="size-3.5 shrink-0" /> Low
+      </span>
+    ),
+  },
 ]
 
 const PRIORITY_LABELS = ["No priority", "Urgent", "High", "Medium", "Low"]
@@ -65,6 +100,7 @@ export function NewIssueModal(props: {
   const [assignee, setAssignee] = createSignal("")
   const [project, setProject] = createSignal("")
   const [selectedLabels, setSelectedLabels] = createSignal("")
+  let titleInputRef: HTMLInputElement | undefined
   const [loading, setLoading] = createSignal(false)
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null)
   const [dataLoaded, setDataLoaded] = createSignal(false)
@@ -78,6 +114,12 @@ export function NewIssueModal(props: {
   const [projectOpen, setProjectOpen] = createSignal(false)
   const [labelsOpen, setLabelsOpen] = createSignal(false)
 
+  // Focus title input when modal opens
+  createEffect(() => {
+    if (!props.open) return
+    setTimeout(() => titleInputRef?.focus(), 50)
+  })
+
   // Load workspace + teams when modal first opens
   createEffect(() => {
     if (!props.open || dataLoaded()) return
@@ -90,9 +132,7 @@ export function NewIssueModal(props: {
       const wsRes = await client.workspaces.$get()
       if (!wsRes.ok) return
       const wsData = await wsRes.json()
-      const workspace = (wsData as any).workspaces?.find(
-        (w: any) => w.slug === props.workspaceSlug
-      )
+      const workspace = (wsData as any).workspaces?.find((w: any) => w.slug === props.workspaceSlug)
       if (!workspace) return
       setWorkspaceId(workspace.id)
 
@@ -126,8 +166,7 @@ export function NewIssueModal(props: {
       const data = await res.json()
       const statusList: Status[] = (data as any).statuses ?? []
       setStatuses(statusList)
-      const defaultStatus =
-        statusList.find((s) => s.category === "unstarted") ?? statusList[0]
+      const defaultStatus = statusList.find((s) => s.category === "unstarted") ?? statusList[0]
       if (defaultStatus) setSelectedStatusId(defaultStatus.id)
     } catch {}
   }
@@ -192,7 +231,7 @@ export function NewIssueModal(props: {
       value: "",
       label: (
         <span class="flex items-center gap-2">
-          <div class="size-5 rounded-full border border-border/50 flex items-center justify-center shrink-0">
+          <div class="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/50">
             <IconPerson class="size-3 text-muted-foreground" />
           </div>
           No assignee
@@ -201,34 +240,39 @@ export function NewIssueModal(props: {
     },
   ]
 
-  const projectItems = (): ComboboxItem[] => [
-    { value: "", label: "No project" },
-  ]
+  const projectItems = (): ComboboxItem[] => [{ value: "", label: "No project" }]
 
   const labelItems = (): ComboboxItem[] => []
 
   return (
-    <Dialog open={props.open} onOpenChange={(open) => { if (!open) handleClose() }}>
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+    >
       <DialogContent
         showClose={false}
-        class="p-0 gap-0 overflow-hidden"
+        class="gap-0 overflow-hidden p-0"
+        onOpenAutoFocus={(e: Event) => e.preventDefault()}
         style={{
           "max-width": fullscreen() ? "calc(100vw - 80px)" : "560px",
           width: fullscreen() ? "100%" : "560px",
           height: fullscreen() ? "calc(100vh - 40px)" : "360px",
-          transition: "max-width 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1), height 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+          transition:
+            "max-width 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1), height 300ms cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
-        <form onSubmit={handleSubmit} class="flex flex-col h-full">
+        <form onSubmit={handleSubmit} class="flex h-full flex-col">
           {/* Header: Team + Fullscreen */}
           <div class="flex items-center justify-between px-4 pt-3 pb-1">
             <Show
               when={selectedTeam()}
-              fallback={<div class="h-4 w-28 rounded bg-secondary/40 animate-pulse" />}
+              fallback={<div class="h-4 w-28 animate-pulse rounded bg-secondary/40" />}
             >
               <div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <div class="size-4 rounded bg-primary/20 flex items-center justify-center shrink-0">
-                  <span class="text-[8px] font-bold text-primary">
+                <div class="flex size-4 shrink-0 items-center justify-center rounded bg-primary/20">
+                  <span class="font-bold text-[8px] text-primary">
                     {selectedTeam()!.identifier?.[0] ?? "T"}
                   </span>
                 </div>
@@ -237,7 +281,7 @@ export function NewIssueModal(props: {
             </Show>
             <button
               type="button"
-              class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+              class="rounded p-1 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
               title={fullscreen() ? "Exit fullscreen" : "Fullscreen"}
               onClick={() => setFullscreen((f) => !f)}
             >
@@ -248,34 +292,34 @@ export function NewIssueModal(props: {
           {/* Title */}
           <div class="px-4 pb-1">
             <input
-              autofocus
+              ref={titleInputRef}
               type="text"
               placeholder="Issue title"
               value={title()}
               onInput={(e) => setTitle(e.currentTarget.value)}
-              class="w-full text-[15px] font-medium text-foreground placeholder:text-muted-foreground/40 bg-transparent outline-none"
+              class="w-full bg-transparent font-medium text-[15px] text-foreground outline-none placeholder:text-muted-foreground/40"
             />
           </div>
 
           {/* Description */}
-          <div class="px-4 pb-3 flex-1">
+          <div class="flex-1 px-4 pb-3">
             <textarea
               placeholder="Add description..."
               value={description()}
               onInput={(e) => setDescription(e.currentTarget.value)}
-              class="w-full h-full text-[13px] text-foreground/80 placeholder:text-muted-foreground/30 bg-transparent outline-none resize-none"
+              class="h-full w-full resize-none bg-transparent text-[13px] text-foreground/80 outline-none placeholder:text-muted-foreground/30"
             />
           </div>
 
           {/* Toolbar */}
-          <div class="flex items-center gap-1 px-3 py-2.5 border-t border-border/40">
+          <div class="flex items-center gap-1 border-border/40 border-t px-3 py-2.5">
             {/* Status */}
             <ToolbarCombobox
               open={statusOpen()}
               onOpenChange={setStatusOpen}
               items={statusItems()}
               value={selectedStatusId() ?? ""}
-              onValueChange={(v) => setSelectedStatusId(v as string || null)}
+              onValueChange={(v) => setSelectedStatusId((v as string) || null)}
               searchPlaceholder="Search status..."
               contentClass="w-48"
               disallowEmptySelection
@@ -332,7 +376,9 @@ export function NewIssueModal(props: {
               onOpenChange={setLabelsOpen}
               items={labelItems()}
               value={selectedLabels()}
-              onValueChange={(v) => setSelectedLabels(Array.isArray(v) ? v.join(",") : v as string)}
+              onValueChange={(v) =>
+                setSelectedLabels(Array.isArray(v) ? v.join(",") : (v as string))
+              }
               searchPlaceholder="Search labels..."
               contentClass="w-48"
               multiple
@@ -347,9 +393,7 @@ export function NewIssueModal(props: {
 
             {/* More actions menu */}
             <DropdownMenu>
-              <DropdownMenuTrigger
-                class="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-              >
+              <DropdownMenuTrigger class="rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
                 <IconMore class="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent class="w-56">
@@ -384,11 +428,11 @@ export function NewIssueModal(props: {
           </div>
 
           {/* Bottom bar */}
-          <div class="flex items-center gap-1.5 px-3 py-2.5 border-t border-border/40">
+          <div class="flex items-center gap-1.5 border-border/40 border-t px-3 py-2.5">
             <div class="flex-1" />
 
             {/* Create more toggle */}
-            <label class="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none mr-2">
+            <label class="mr-2 flex cursor-pointer select-none items-center gap-1.5 text-[12px] text-muted-foreground">
               <input
                 type="checkbox"
                 checked={createMore()}
@@ -401,7 +445,7 @@ export function NewIssueModal(props: {
             <button
               type="submit"
               disabled={loading() || !title().trim() || !selectedTeamId()}
-              class="px-3 py-1.5 rounded bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              class="rounded bg-primary px-3 py-1.5 font-medium text-[13px] text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading() ? "Creating..." : "Create issue"}
             </button>
@@ -430,9 +474,7 @@ function ToolbarCombobox(props: {
 }) {
   return (
     <Popover open={props.open} onOpenChange={props.onOpenChange}>
-      <PopoverTrigger
-        class="flex items-center gap-1.5 px-2 py-1 rounded text-[12px] text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors border border-border/40"
-      >
+      <PopoverTrigger class="flex items-center gap-1.5 rounded border border-border/40 px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
         {props.children}
       </PopoverTrigger>
       <PopoverContent
@@ -466,15 +508,24 @@ function StatusDot(props: { category?: string; color?: string }) {
   const color = () => {
     if (props.color) return props.color
     switch (props.category) {
-      case "triage": return "#6b7280"
-      case "backlog": return "#6b7280"
-      case "unstarted": return "#9ca3af"
-      case "started": return "#f59e0b"
-      case "in_review": return "#22c55e"
-      case "completed": return "#10b981"
-      case "cancelled": return "#6b7280"
-      case "duplicate": return "#6b7280"
-      default: return "#6b7280"
+      case "triage":
+        return "#6b7280"
+      case "backlog":
+        return "#6b7280"
+      case "unstarted":
+        return "#9ca3af"
+      case "started":
+        return "#f59e0b"
+      case "in_review":
+        return "#22c55e"
+      case "completed":
+        return "#10b981"
+      case "cancelled":
+        return "#6b7280"
+      case "duplicate":
+        return "#6b7280"
+      default:
+        return "#6b7280"
     }
   }
 
@@ -484,7 +535,17 @@ function StatusDot(props: { category?: string; color?: string }) {
   if (cat() === "triage") {
     return (
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
-        <rect x="6" y="1" width="7" height="7" rx="1" transform="rotate(45 6 1)" fill="none" stroke={color()} stroke-width="1.5" />
+        <rect
+          x="6"
+          y="1"
+          width="7"
+          height="7"
+          rx="1"
+          transform="rotate(45 6 1)"
+          fill="none"
+          stroke={color()}
+          stroke-width="1.5"
+        />
       </svg>
     )
   }
@@ -504,7 +565,14 @@ function StatusDot(props: { category?: string; color?: string }) {
     return (
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
         <circle cx="6" cy="6" r="4.5" fill={color()} stroke="none" />
-        <path d="M3.5 6 L5.5 8 L8.5 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <path
+          d="M3.5 6 L5.5 8 L8.5 4"
+          stroke="white"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
       </svg>
     )
   }
@@ -514,7 +582,9 @@ function StatusDot(props: { category?: string; color?: string }) {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
       <circle
-        cx="6" cy="6" r="4.5"
+        cx="6"
+        cy="6"
+        r="4.5"
         fill="none"
         stroke={color()}
         stroke-width="1.5"
@@ -535,7 +605,13 @@ function StatusDot(props: { category?: string; color?: string }) {
 function PriorityIcon(props: { value: number; class?: string }) {
   if (props.value === 0) {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class={props.class} aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        class={props.class}
+        aria-hidden="true"
+      >
         <rect x="1" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
         <rect x="6" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
         <rect x="11" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
@@ -544,7 +620,13 @@ function PriorityIcon(props: { value: number; class?: string }) {
   }
   if (props.value === 1) {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" class={props.class} aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 16 16"
+        fill="none"
+        class={props.class}
+        aria-hidden="true"
+      >
         <rect x="1" y="8" width="3" height="6" rx="0.5" fill="#ef4444" />
         <rect x="6" y="5" width="3" height="9" rx="0.5" fill="#ef4444" />
         <rect x="11" y="2" width="3" height="12" rx="0.5" fill="#ef4444" />
@@ -553,7 +635,13 @@ function PriorityIcon(props: { value: number; class?: string }) {
   }
   if (props.value === 2) {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" class={props.class} aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 16 16"
+        fill="none"
+        class={props.class}
+        aria-hidden="true"
+      >
         <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
         <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" />
         <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
@@ -562,7 +650,13 @@ function PriorityIcon(props: { value: number; class?: string }) {
   }
   if (props.value === 3) {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" class={props.class} aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 16 16"
+        fill="none"
+        class={props.class}
+        aria-hidden="true"
+      >
         <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
         <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
         <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
@@ -570,7 +664,13 @@ function PriorityIcon(props: { value: number; class?: string }) {
     )
   }
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" class={props.class} aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      fill="none"
+      class={props.class}
+      aria-hidden="true"
+    >
       <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.3" />
       <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
       <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
