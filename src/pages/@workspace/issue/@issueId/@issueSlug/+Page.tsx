@@ -72,17 +72,26 @@ function formatDateTime(iso: string | null): string {
     " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
 }
 
+// Parse "WEB-1" → { teamIdentifier: "WEB", number: 1 }
+// Handles identifiers with hyphens like "MY-TEAM-1" by splitting on the last "-"
+function parseIssueId(issueId: string): { teamIdentifier: string; number: number } {
+  const lastDash = issueId.lastIndexOf("-")
+  if (lastDash === -1) return { teamIdentifier: issueId, number: NaN }
+  return {
+    teamIdentifier: issueId.slice(0, lastDash),
+    number: parseInt(issueId.slice(lastDash + 1), 10),
+  }
+}
+
 export default function IssueDetailPage() {
   const pageCtx = usePageContext()
   const params = () => pageCtx.routeParams as Record<string, string>
   const workspaceSlug = () => params().workspace ?? ""
-  const teamIdentifier = () => params().teamIdentifier ?? ""
   const issueId = () => params().issueId ?? ""
-  const issueNumber = () => {
-    const raw = issueId()
-    const prefix = teamIdentifier() + "-"
-    return raw.startsWith(prefix) ? parseInt(raw.slice(prefix.length), 10) : NaN
-  }
+
+  const parsed = () => parseIssueId(issueId())
+  const teamIdentifier = () => parsed().teamIdentifier
+  const issueNumber = () => parsed().number
 
   const [issue, issueLoading] = usePowerSyncGetOne<IssueRow>(
     () => `

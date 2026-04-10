@@ -3,6 +3,16 @@ import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
 
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 48)
+}
+
 type Status = "backlog" | "todo" | "in_progress" | "done" | "cancelled"
 type Priority = "urgent" | "high" | "medium" | "low" | "none"
 
@@ -227,7 +237,7 @@ function IssueGroup(props: {
           {(issue) => (
             <IssueRow
               issue={issue}
-              href={`/${props.workspaceSlug}/team/${props.teamIdentifier}/issues/${issue.id}`}
+              href={`/${props.workspaceSlug}/issue/${issue.id}/${slugify(issue.title)}`}
             />
           )}
         </For>
