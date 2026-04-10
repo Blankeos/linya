@@ -37,7 +37,12 @@ export default function WorkspaceLayout(props: FlowProps) {
   const [favoritesExpanded, setFavoritesExpanded] = createSignal(true)
   const [teamsExpanded, setTeamsExpanded] = createSignal(true)
 
-  const [sidebarTeams] = usePowerSyncQuery<{ id: string; name: string; identifier: string; color: string | null }>(
+  const [sidebarTeams] = usePowerSyncQuery<{
+    id: string
+    name: string
+    identifier: string
+    color: string | null
+  }>(
     () => `
       SELECT t.id, t.name, t.identifier, t.color
       FROM team t
@@ -393,7 +398,7 @@ export default function WorkspaceLayout(props: FlowProps) {
 
           {/* Main content */}
           <main class="flex-1 flex flex-col overflow-hidden bg-sidebar pr-2 py-2">
-            <div class="flex-1 flex flex-col overflow-hidden rounded-lg border border-border/50 bg-card">
+            <div class="flex-1 flex flex-col overflow-hidden rounded-lg border border-border/50 bg-background">
               {props.children}
             </div>
           </main>

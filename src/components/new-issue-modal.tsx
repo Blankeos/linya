@@ -1,4 +1,4 @@
-import { createEffect, createSignal, type JSX, Show } from "solid-js"
+import { createEffect, createSignal, Show } from "solid-js"
 import {
   IconCalendar,
   IconCustomers,
@@ -12,7 +12,7 @@ import {
   IconSubIssue,
   IconTag,
 } from "@/assets/icons"
-import { Combobox2Command, type ComboboxItem } from "@/components/ui/combobox-2"
+import { type ComboboxItem } from "@/components/ui/combobox-2"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -22,68 +22,20 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { honoClient } from "@/lib/hono-client"
-import { cn } from "@/utils/cn"
+import {
+  DEFAULT_STATUSES,
+  makePriorityItems,
+  makeStatusItems,
+  PRIORITY_LABELS,
+  PriorityIcon,
+  StatusIcon,
+  ToolbarCombobox,
+  type Status,
+} from "@/components/issue-fields"
 
-const PRIORITIES: ComboboxItem[] = [
-  {
-    value: "0",
-    label: (
-      <span class="flex items-center gap-2">
-        <PriorityIcon value={0} class="size-3.5 shrink-0" /> No priority
-      </span>
-    ),
-  },
-  {
-    value: "1",
-    label: (
-      <span class="flex items-center gap-2">
-        <PriorityIcon value={1} class="size-3.5 shrink-0" /> Urgent
-      </span>
-    ),
-  },
-  {
-    value: "2",
-    label: (
-      <span class="flex items-center gap-2">
-        <PriorityIcon value={2} class="size-3.5 shrink-0" /> High
-      </span>
-    ),
-  },
-  {
-    value: "3",
-    label: (
-      <span class="flex items-center gap-2">
-        <PriorityIcon value={3} class="size-3.5 shrink-0" /> Medium
-      </span>
-    ),
-  },
-  {
-    value: "4",
-    label: (
-      <span class="flex items-center gap-2">
-        <PriorityIcon value={4} class="size-3.5 shrink-0" /> Low
-      </span>
-    ),
-  },
-]
-
-const PRIORITY_LABELS = ["No priority", "Urgent", "High", "Medium", "Low"]
-
-type Status = { id: string; name: string; color: string; category: string }
 type Team = { id: string; name: string; identifier: string }
 
-const DEFAULT_STATUSES: Status[] = [
-  { id: "triage", name: "Triage", color: "#6b7280", category: "triage" },
-  { id: "backlog", name: "Backlog", color: "#6b7280", category: "backlog" },
-  { id: "todo", name: "Todo", color: "#9ca3af", category: "unstarted" },
-  { id: "in_progress", name: "In Progress", color: "#f59e0b", category: "started" },
-  { id: "in_review", name: "In Review", color: "#22c55e", category: "in_review" },
-  { id: "done", name: "Done", color: "#10b981", category: "completed" },
-  { id: "cancelled", name: "Cancelled", color: "#6b7280", category: "cancelled" },
-  { id: "duplicate", name: "Duplicate", color: "#6b7280", category: "duplicate" },
-]
 
 export function NewIssueModal(props: {
   open: boolean
@@ -215,16 +167,7 @@ export function NewIssueModal(props: {
   const selectedStatus = () => statuses().find((s) => s.id === selectedStatusId())
   const selectedTeam = () => teams().find((t) => t.id === selectedTeamId())
 
-  const statusItems = (): ComboboxItem[] =>
-    statuses().map((s) => ({
-      value: s.id,
-      label: (
-        <span class="flex items-center gap-2">
-          <StatusDot category={s.category} color={s.color} />
-          {s.name}
-        </span>
-      ),
-    }))
+  const statusItems = () => makeStatusItems(statuses())
 
   const assigneeItems = (): ComboboxItem[] => [
     {
@@ -324,7 +267,7 @@ export function NewIssueModal(props: {
               contentClass="w-48"
               disallowEmptySelection
             >
-              <StatusDot category={selectedStatus()?.category} color={selectedStatus()?.color} />
+              <StatusIcon category={selectedStatus()?.category} color={selectedStatus()?.color} class="size-3.5" />
               <span>{selectedStatus()?.name ?? "Status"}</span>
             </ToolbarCombobox>
 
@@ -332,7 +275,7 @@ export function NewIssueModal(props: {
             <ToolbarCombobox
               open={priorityOpen()}
               onOpenChange={setPriorityOpen}
-              items={PRIORITIES}
+              items={makePriorityItems()}
               value={priority()}
               onValueChange={(v) => setPriority(v as string)}
               searchPlaceholder="Search priority..."
@@ -456,224 +399,3 @@ export function NewIssueModal(props: {
   )
 }
 
-// ===========================================================================
-// ToolbarCombobox — compact trigger wrapping Combobox2Command
-// ===========================================================================
-
-function ToolbarCombobox(props: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  items: ComboboxItem[]
-  value: string
-  onValueChange: (value: string | string[]) => void
-  searchPlaceholder?: string
-  contentClass?: string
-  children: JSX.Element
-  disallowEmptySelection?: boolean
-  multiple?: boolean
-}) {
-  return (
-    <Popover open={props.open} onOpenChange={props.onOpenChange}>
-      <PopoverTrigger class="flex items-center gap-1.5 rounded border border-border/40 px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
-        {props.children}
-      </PopoverTrigger>
-      <PopoverContent
-        class={cn("p-0", props.contentClass)}
-        onKeyDown={(e: KeyboardEvent) => {
-          if (e.key === "Escape") {
-            props.onOpenChange(false)
-            e.stopPropagation()
-          }
-        }}
-      >
-        <Combobox2Command
-          items={props.items}
-          selectedValue={props.value}
-          onSelectedValueChange={props.onValueChange}
-          searchPlaceholder={props.searchPlaceholder}
-          onClose={() => props.onOpenChange(false)}
-          disallowEmptySelection={props.disallowEmptySelection}
-          multiple={props.multiple}
-        />
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-// ===========================================================================
-// Sub-components
-// ===========================================================================
-
-function StatusDot(props: { category?: string; color?: string }) {
-  const color = () => {
-    if (props.color) return props.color
-    switch (props.category) {
-      case "triage":
-        return "#6b7280"
-      case "backlog":
-        return "#6b7280"
-      case "unstarted":
-        return "#9ca3af"
-      case "started":
-        return "#f59e0b"
-      case "in_review":
-        return "#22c55e"
-      case "completed":
-        return "#10b981"
-      case "cancelled":
-        return "#6b7280"
-      case "duplicate":
-        return "#6b7280"
-      default:
-        return "#6b7280"
-    }
-  }
-
-  const cat = () => props.category
-
-  // Triage: diamond shape
-  if (cat() === "triage") {
-    return (
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
-        <rect
-          x="6"
-          y="1"
-          width="7"
-          height="7"
-          rx="1"
-          transform="rotate(45 6 1)"
-          fill="none"
-          stroke={color()}
-          stroke-width="1.5"
-        />
-      </svg>
-    )
-  }
-
-  // Cancelled / Duplicate: circle with X
-  if (cat() === "cancelled" || cat() === "duplicate") {
-    return (
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
-        <circle cx="6" cy="6" r="4.5" fill={color()} stroke="none" />
-        <path d="M4 4l4 4M8 4l-4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" />
-      </svg>
-    )
-  }
-
-  // Completed (Done): filled circle with checkmark
-  if (cat() === "completed") {
-    return (
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
-        <circle cx="6" cy="6" r="4.5" fill={color()} stroke="none" />
-        <path
-          d="M3.5 6 L5.5 8 L8.5 4"
-          stroke="white"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          fill="none"
-        />
-      </svg>
-    )
-  }
-
-  const isDashed = () => cat() === "backlog"
-
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="shrink-0">
-      <circle
-        cx="6"
-        cy="6"
-        r="4.5"
-        fill="none"
-        stroke={color()}
-        stroke-width="1.5"
-        stroke-dasharray={isDashed() ? "2.5 2" : undefined}
-      />
-      {/* In Progress: half-filled */}
-      <Show when={cat() === "started"}>
-        <path d="M6 1.5 A4.5 4.5 0 0 1 6 10.5 Z" fill={color()} />
-      </Show>
-      {/* In Review: inner ring */}
-      <Show when={cat() === "in_review"}>
-        <circle cx="6" cy="6" r="2.5" fill="none" stroke={color()} stroke-width="1.5" />
-      </Show>
-    </svg>
-  )
-}
-
-function PriorityIcon(props: { value: number; class?: string }) {
-  if (props.value === 0) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        class={props.class}
-        aria-hidden="true"
-      >
-        <rect x="1" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
-        <rect x="6" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
-        <rect x="11" y="7" width="3" height="2" rx="0.5" opacity="0.3" />
-      </svg>
-    )
-  }
-  if (props.value === 1) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 16 16"
-        fill="none"
-        class={props.class}
-        aria-hidden="true"
-      >
-        <rect x="1" y="8" width="3" height="6" rx="0.5" fill="#ef4444" />
-        <rect x="6" y="5" width="3" height="9" rx="0.5" fill="#ef4444" />
-        <rect x="11" y="2" width="3" height="12" rx="0.5" fill="#ef4444" />
-      </svg>
-    )
-  }
-  if (props.value === 2) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 16 16"
-        fill="none"
-        class={props.class}
-        aria-hidden="true"
-      >
-        <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
-        <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" />
-        <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
-      </svg>
-    )
-  }
-  if (props.value === 3) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 16 16"
-        fill="none"
-        class={props.class}
-        aria-hidden="true"
-      >
-        <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" />
-        <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
-        <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
-      </svg>
-    )
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 16 16"
-      fill="none"
-      class={props.class}
-      aria-hidden="true"
-    >
-      <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.3" />
-      <rect x="6" y="5" width="3" height="9" rx="0.5" fill="currentColor" opacity="0.3" />
-      <rect x="11" y="2" width="3" height="12" rx="0.5" fill="currentColor" opacity="0.3" />
-    </svg>
-  )
-}

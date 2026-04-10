@@ -19,7 +19,8 @@
     "types": [
       "@types/bun", // Remove when Node
       "vite/client",
-      "vike-solid/client"
+      "vike-solid/client",
+      "vite-plugin-solid-svg/types-component-solid"
     ],
     "jsx": "preserve",
     "jsxImportSource": "solid-js"

@@ -1,4 +1,6 @@
 import type { AbstractPowerSyncDatabase, PowerSyncBackendConnector } from "@powersync/web"
+import { UpdateType } from "@powersync/common"
+import type { CrudEntry } from "@powersync/common"
 import { publicEnv } from "@/env.public"
 import { honoClient } from "@/lib/hono-client"
 
@@ -30,15 +32,38 @@ export class BackendConnector implements PowerSyncBackendConnector {
 
     try {
       for (const entry of batch.crud) {
-        // TODO: route per-table uploads to the correct API endpoint.
-        // For now this is a placeholder — implement as tables are added.
-        console.warn("[PowerSync] uploadData not yet fully implemented for table:", entry.table)
+        switch (entry.table) {
+          case "issue":
+            await this.uploadIssue(entry)
+            break
+          default:
+            console.warn("[PowerSync] uploadData not implemented for table:", entry.table)
+        }
       }
-
       await batch.complete()
     } catch (error) {
       console.error("[PowerSync] Upload error:", error)
       throw error
+    }
+  }
+
+  private async uploadIssue(entry: CrudEntry): Promise<void> {
+    const client = honoClient()
+    switch (entry.op) {
+      case UpdateType.PATCH:
+      case UpdateType.PUT: {
+        const { updated_at, created_at, id, team_id, number, ...fields } = entry.opData ?? {}
+        await client.issues[":issueId"].$put({
+          param: { issueId: entry.id },
+          json: fields,
+        })
+        break
+      }
+      case UpdateType.DELETE:
+        await client.issues[":issueId"].$delete({
+          param: { issueId: entry.id },
+        })
+        break
     }
   }
 }

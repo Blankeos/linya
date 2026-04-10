@@ -23,21 +23,21 @@ type View = {
 
 type Tab = "issues" | "projects"
 
-export default function ViewsIssuesPage() {
+export default function ViewsProjectsPage() {
   useMetadata({ title: getTitle("Views") })
   const pageCtx = usePageContext()
   const params = () => pageCtx.routeParams as Record<string, string>
   const workspaceSlug = () => params().workspace ?? ""
   const tab = (): Tab => {
     const path = pageCtx.urlPathname
-    return path.includes("/projects") ? "projects" : "issues"
+    return path.includes("/issues") ? "issues" : "projects"
   }
 
   const [views] = usePowerSyncQuery<View>(
     () => `
       SELECT cv.* FROM custom_view cv
       JOIN workspace w ON cv.workspace_id = w.id
-      WHERE w.slug = ? AND cv.type = 'issue'
+      WHERE w.slug = ? AND cv.type = 'project'
       ORDER BY cv.sort_order ASC
     `,
     () => [workspaceSlug()]
@@ -91,7 +91,7 @@ export default function ViewsIssuesPage() {
               <div class="flex flex-col gap-3">
                 <h2 class="text-[16px] font-semibold text-foreground">Views</h2>
                 <p class="text-[13px] text-muted-foreground leading-relaxed">
-                  Create custom views using filters to show only the issues you want to see. You can save,
+                  Create custom views using filters to show only the projects you want to see. You can save,
                   share, and favorite these views for easy access and faster team collaboration.
                 </p>
                 <p class="text-[13px] text-muted-foreground">

@@ -85,6 +85,7 @@ export const issuesController = new Hono()
       z.object({
         title: z.string().min(1).max(500).optional(),
         description: z.string().nullable().optional(),
+        description_html: z.string().nullable().optional(),
         status_id: z.string().optional(),
         priority: z.number().int().min(0).max(4).optional(),
         assignee_id: z.string().nullable().optional(),

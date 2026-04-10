@@ -31,3 +31,4 @@ export { default as IconCheck } from './lucide:check.tsx';
 export { default as IconCustomizeSidebar } from './lucide:pencil-ruler.tsx';
 export { default as IconMinimize } from './lucide:minimize-2.tsx';
 export { default as IconX } from './lucide:x.tsx';
+export { default as IconIllusLayers } from "./illus_layers.svg"

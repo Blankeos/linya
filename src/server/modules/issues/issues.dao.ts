@@ -86,6 +86,7 @@ export class IssuesDAO {
     updates: {
       title?: string
       description?: string | null
+      description_html?: string | null
       status_id?: string
       priority?: number
       assignee_id?: string | null

@@ -7,6 +7,7 @@ import { useAuthContext } from "@/context/auth.context"
 import { usePowerSyncQuery } from "@/lib/powersync"
 import getTitle from "@/utils/get-title"
 import { NewIssueModal } from "@/components/new-issue-modal"
+import { PillTabs } from "@/components/pill-tabs"
 
 function slugify(text: string) {
   return text
@@ -131,20 +132,17 @@ export default function MyIssuesPage() {
 
       {/* Tabs + controls row */}
       <div class="flex shrink-0 items-center gap-2 px-4 py-2">
-        {/* Tabs — links so the URL reflects the active tab */}
-        <div class="flex flex-1 items-center gap-1">
-          {VALID_TABS.map((t) => (
-            <a
-              href={`/${workspaceSlug()}/my-issues/${t}`}
-              class={`rounded-full px-3 py-1 text-[13px] capitalize transition-colors ${
-                tab() === t
-                  ? "bg-foreground font-medium text-background"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-              }`}
-            >
-              {t}
-            </a>
-          ))}
+        {/* Tabs */}
+        <div class="flex-1">
+          <PillTabs
+            tabs={VALID_TABS.map((t) => ({
+              label: t.charAt(0).toUpperCase() + t.slice(1),
+              href: `/${workspaceSlug()}/my-issues/${t}`,
+            }))}
+            active={tab()}
+            variant="compact"
+            containerClass="flex items-center gap-1"
+          />
         </div>
 
         {/* Right controls */}
@@ -198,6 +196,12 @@ export default function MyIssuesPage() {
           </div>
         </Show>
       </div>
+
+      <NewIssueModal
+        open={newIssueOpen()}
+        onClose={() => setNewIssueOpen(false)}
+        workspaceSlug={workspaceSlug()}
+      />
     </div>
   )
 }

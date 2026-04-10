@@ -539,7 +539,7 @@ export default function TiptapEditor(props: TiptapEditorProps) {
     setBubble({
       visible: true,
       x,
-      y: y - 12, // gap above the selected text
+      y: y - 38, // gap above the selected text
       formats: getActiveFormats(editor),
     })
   }

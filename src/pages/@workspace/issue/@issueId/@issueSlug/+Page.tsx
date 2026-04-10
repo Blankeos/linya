@@ -1,12 +1,33 @@
-import { createSignal, For, Show } from "solid-js"
+import { createEffect, createSignal, For, Show } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import getTitle from "@/utils/get-title"
 import TiptapEditor from "@/components/tiptap-editor"
-import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
+import { usePowerSyncQuery, usePowerSyncExecute } from "@/lib/powersync"
+import {
+  IconChevronDown,
+  IconPerson,
+  IconTag,
+  IconProjects,
+  IconCheck,
+} from "@/assets/icons"
+import { type ComboboxItem } from "@/components/ui/combobox-2"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/utils/cn"
+import { Tippy } from "@/lib/solid-tippy"
+import { useHotkeys } from "bagon-hooks"
+import { toast } from "solid-sonner"
+import {
+  makePriorityItems,
+  makeStatusItems,
+  mapPriority,
+  PriorityIcon,
+  SidebarCombobox,
+  StatusIcon,
+  type Priority,
+} from "@/components/issue-fields"
 
 type StatusCategory = "backlog" | "unstarted" | "started" | "completed" | "cancelled"
-type Priority = "urgent" | "high" | "medium" | "low" | "none"
 
 type IssueRow = {
   id: string
@@ -18,11 +39,14 @@ type IssueRow = {
   created_at: string
   updated_at: string
   number: number
+  team_id: string | null
   team_name: string
   team_identifier: string
+  status_id: string | null
   status_name: string | null
   status_category: StatusCategory | null
   status_color: string | null
+  assignee_id: string | null
   assignee_name: string | null
   assignee_avatar: string | null
 }
@@ -40,15 +64,19 @@ type CommentRow = {
   author_name: string | null
 }
 
-function mapPriority(p: number): Priority {
-  switch (p) {
-    case 1: return "urgent"
-    case 2: return "high"
-    case 3: return "medium"
-    case 4: return "low"
-    default: return "none"
-  }
+type UserRow = {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
 }
+
+type StatusRow = {
+  id: string
+  name: string
+  category: StatusCategory
+  color: string | null
+}
+
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—"
@@ -72,6 +100,16 @@ function formatDateTime(iso: string | null): string {
     " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
 }
 
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 48) || "untitled"
+}
+
 // Parse "WEB-1" → { teamIdentifier: "WEB", number: 1 }
 // Handles identifiers with hyphens like "MY-TEAM-1" by splitting on the last "-"
 function parseIssueId(issueId: string): { teamIdentifier: string; number: number } {
@@ -93,11 +131,12 @@ export default function IssueDetailPage() {
   const teamIdentifier = () => parsed().teamIdentifier
   const issueNumber = () => parsed().number
 
-  const [issue, issueLoading] = usePowerSyncGetOne<IssueRow>(
+  const [issueRows, issueLoading] = usePowerSyncQuery<IssueRow>(
     () => `
       SELECT
         i.id, i.title, i.description, i.description_html,
         i.priority, i.due_date, i.created_at, i.updated_at, i.number,
+        i.team_id, i.status_id, i.assignee_id,
         t.name as team_name, t.identifier as team_identifier,
         ws.name as status_name, ws.category as status_category, ws.color as status_color,
         u.display_name as assignee_name, u.avatar_url as assignee_avatar
@@ -106,9 +145,11 @@ export default function IssueDetailPage() {
       LEFT JOIN workflow_status ws ON i.status_id = ws.id
       LEFT JOIN user u ON i.assignee_id = u.id
       WHERE t.identifier = ? AND i.number = ?
+      LIMIT 1
     `,
     () => [teamIdentifier(), issueNumber()]
   )
+  const issue = () => issueRows()[0] ?? null
 
   const [labels] = usePowerSyncQuery<LabelRow>(
     () => `
@@ -131,11 +172,70 @@ export default function IssueDetailPage() {
     () => [issue()?.id ?? ""]
   )
 
+  const [availableStatuses] = usePowerSyncQuery<StatusRow>(
+    () => `
+      SELECT ws.id, ws.name, ws.category, ws.color
+      FROM workflow_status ws
+      WHERE ws.team_id = ?
+      ORDER BY ws.id ASC
+    `,
+    () => {
+      const iss = issue()
+      if (!iss) return [""]
+      return [iss.team_id || ""]
+    }
+  )
+
+  const [users] = usePowerSyncQuery<UserRow>(
+    () => `
+      SELECT id, display_name, avatar_url
+      FROM user
+      ORDER BY display_name ASC
+    `,
+    () => []
+  )
+
   const issueIdentifier = () => issue() ? `${issue()!.team_identifier}-${issue()!.number}` : issueId()
   const priority = () => mapPriority(issue()?.priority ?? 0)
   const statusCategory = () => issue()?.status_category ?? null
 
   useMetadata({ title: getTitle(issue() ? `${issueIdentifier()} — ${issue()!.title}` : issueId()) })
+
+  // Fix URL slug on load (and after refresh — PowerSync will have latest title)
+  createEffect(() => {
+    const iss = issue()
+    if (!iss || typeof window === "undefined") return
+    const correctSlug = slugify(iss.title)
+    const currentSlug = params().issueSlug ?? ""
+    if (currentSlug !== correctSlug) {
+      history.replaceState(null, "", `/${workspaceSlug()}/issue/${issueId()}/${correctSlug}`)
+    }
+  })
+
+  const execute = usePowerSyncExecute()
+
+  let titleTimer: ReturnType<typeof setTimeout> | undefined
+  let descTimer: ReturnType<typeof setTimeout> | undefined
+
+  function updateUrlSlug(title: string) {
+    if (typeof window === "undefined") return
+    history.replaceState(null, "", `/${workspaceSlug()}/issue/${issueId()}/${slugify(title)}`)
+  }
+
+  function handleTitleChange(value: string, id: string) {
+    clearTimeout(titleTimer)
+    titleTimer = setTimeout(async () => {
+      if (!value.trim()) return
+      await execute("UPDATE issue SET title = ? WHERE id = ?", [value.trim(), id])
+    }, 300)
+  }
+
+  function handleDescriptionChange(html: string, id: string) {
+    clearTimeout(descTimer)
+    descTimer = setTimeout(async () => {
+      await execute("UPDATE issue SET description_html = ? WHERE id = ?", [html, id])
+    }, 300)
+  }
 
   const [comment, setComment] = createSignal("")
   const [copied, setCopied] = createSignal(false)
@@ -209,15 +309,40 @@ export default function IssueDetailPage() {
                   <StatusBadge category={statusCategory()} name={iss().status_name} />
                 </div>
 
-                <h1 class="text-[22px] font-semibold text-foreground tracking-[-0.02em] leading-tight mb-5">
-                  {iss().title}
-                </h1>
+                <textarea
+                  class="w-full text-[22px] font-semibold text-foreground tracking-[-0.02em] leading-tight mb-5 bg-transparent border-none outline-none resize-none overflow-hidden placeholder:text-muted-foreground/40"
+                  rows={1}
+                  placeholder="Untitled"
+                  value={iss().title}
+                  ref={(el) => {
+                    requestAnimationFrame(() => {
+                      el.style.height = "auto"
+                      el.style.height = el.scrollHeight + "px"
+                    })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  onInput={(e) => {
+                    const el = e.currentTarget
+                    el.style.height = "auto"
+                    el.style.height = el.scrollHeight + "px"
+                    handleTitleChange(el.value, iss().id)
+                  }}
+                  onBlur={(e) => {
+                    updateUrlSlug(e.currentTarget.value)
+                  }}
+                />
 
                 <div class="mb-8">
                   <TiptapEditor
                     content={iss().description_html ?? iss().description ?? ""}
                     placeholder="Add description… (type / for commands)"
                     editorClass="min-h-[120px]"
+                    onChange={(html) => handleDescriptionChange(html, iss().id)}
                   />
                 </div>
 
@@ -278,72 +403,17 @@ export default function IssueDetailPage() {
               </div>
 
               {/* Right metadata sidebar */}
-              <div class="w-[260px] shrink-0 border-l border-border/40 overflow-y-auto px-4 py-5">
-                <MetaSection label="Status">
-                  <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04] cursor-pointer transition-colors -mx-2">
-                    <StatusIcon category={statusCategory()} class="size-4 shrink-0" />
-                    <span class="text-[13px] text-foreground">
-                      {iss().status_name ?? "No status"}
-                    </span>
-                  </div>
-                </MetaSection>
-
-                <MetaSection label="Priority">
-                  <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04] cursor-pointer transition-colors -mx-2">
-                    <PriorityIcon priority={priority()} class="size-3.5 shrink-0" />
-                    <span class="text-[13px] text-foreground capitalize">
-                      {priority() === "none" ? "No priority" : priority()}
-                    </span>
-                  </div>
-                </MetaSection>
-
-                <MetaSection label="Assignee">
-                  <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.04] cursor-pointer transition-colors -mx-2">
-                    <div class="size-5 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <span class="text-[9px] font-medium text-primary">
-                        {iss().assignee_name ? iss().assignee_name!.charAt(0).toUpperCase() : "?"}
-                      </span>
-                    </div>
-                    <span class="text-[13px] text-foreground">
-                      {iss().assignee_name ?? "Unassigned"}
-                    </span>
-                  </div>
-                </MetaSection>
-
-                <MetaSection label="Labels">
-                  <div class="flex flex-wrap gap-1 px-2 -mx-2">
-                    <Show when={labels().length > 0} fallback={
-                      <span class="text-[12px] text-muted-foreground/50 py-1">No labels</span>
-                    }>
-                      <For each={labels()}>
-                        {(label) => (
-                          <span class="text-[11px] px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground bg-secondary/30">
-                            {label.name}
-                          </span>
-                        )}
-                      </For>
-                    </Show>
-                  </div>
-                </MetaSection>
-
-                <MetaSection label="Due date">
-                  <div class="px-2 py-1.5 -mx-2">
-                    <span class="text-[13px] text-foreground">
-                      {iss().due_date ? formatDateShort(iss().due_date) : "No due date"}
-                    </span>
-                  </div>
-                </MetaSection>
-
-                <div class="pt-4 border-t border-border/30 space-y-2">
-                  <div class="flex items-center justify-between text-[11px]">
-                    <span class="text-muted-foreground/60">Created</span>
-                    <span class="text-muted-foreground">{formatDate(iss().created_at)}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-[11px]">
-                    <span class="text-muted-foreground/60">Updated</span>
-                    <span class="text-muted-foreground">{formatDate(iss().updated_at)}</span>
-                  </div>
-                </div>
+              <div class="w-[280px] shrink-0 overflow-y-auto">
+                <IssueSidebar
+                  issue={iss()}
+                  labels={labels()}
+                  statuses={availableStatuses()}
+                  users={users()}
+                  workspaceSlug={workspaceSlug()}
+                  onStatusChange={(statusId) => execute("UPDATE issue SET status_id = ? WHERE id = ?", [statusId, iss().id])}
+                  onPriorityChange={(p) => execute("UPDATE issue SET priority = ? WHERE id = ?", [p, iss().id])}
+                  onAssigneeChange={(userId) => execute("UPDATE issue SET assignee_id = ? WHERE id = ?", [userId || null, iss().id])}
+                />
               </div>
             </div>
           </div>
@@ -353,13 +423,308 @@ export default function IssueDetailPage() {
   )
 }
 
-function MetaSection(props: { label: string; children: any }) {
+// ===========================================================================
+// Issue Sidebar Component
+// ===========================================================================
+
+interface IssueSidebarProps {
+  issue: IssueRow | undefined
+  labels: LabelRow[]
+  statuses: StatusRow[]
+  users: UserRow[]
+  workspaceSlug: string
+  onStatusChange: (statusId: string) => void
+  onPriorityChange: (priority: number) => void
+  onAssigneeChange: (userId: string | null) => void
+}
+
+function IssueSidebar(props: IssueSidebarProps) {
+  const [propertiesOpen, setPropertiesOpen] = createSignal(true)
+  const [labelsOpen, setLabelsOpen] = createSignal(true)
+  const [projectOpen, setProjectOpen] = createSignal(true)
+  const [promptMenuOpen, setPromptMenuOpen] = createSignal(false)
+  const [copiedUrl, setCopiedUrl] = createSignal(false)
+  const [copiedId, setCopiedId] = createSignal(false)
+  const [copiedBranch, setCopiedBranch] = createSignal(false)
+  const [copiedPrompt, setCopiedPrompt] = createSignal(false)
+
+  // Reactive computed values — always read from props.issue, never a static snapshot
+  const currentPriority = () => mapPriority(props.issue?.priority ?? 0)
+  const currentStatus = () => props.statuses.find((s) => s.id === props.issue?.status_id)
+
+  if (!props.issue) return null
+  const iss = props.issue
+
+  const issueIdentifier = `${iss.team_identifier}-${iss.number}`
+  const branchName = `${iss.team_identifier.toLowerCase()}-${iss.number}/${slugify(iss.title)}`
+
+  function flashCopy(setter: (v: boolean) => void, text: string, label: string = "Copied!") {
+    navigator.clipboard.writeText(text)
+    toast.success(label)
+    setter(true)
+    setTimeout(() => setter(false), 1500)
+  }
+
+  function buildPrompt() {
+    return `Issue: ${issueIdentifier} — ${iss.title}\n\n${iss.description ?? ""}`
+  }
+
+  const statusItems = () => makeStatusItems(props.statuses)
+  const priorityItems = () => makePriorityItems()
+
+  const assigneeItems = (): ComboboxItem[] => [
+    {
+      value: "",
+      label: (
+        <span class="flex items-center gap-2">
+          <div class="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/50">
+            <IconPerson class="size-3 text-muted-foreground" />
+          </div>
+          Unassigned
+        </span>
+      ),
+    },
+    ...props.users.map((u) => ({
+      value: u.id,
+      label: (
+        <span class="flex items-center gap-2">
+          <div class="size-4 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <span class="text-[8px] font-medium text-primary">
+              {(u.display_name ?? "?").charAt(0).toUpperCase()}
+            </span>
+          </div>
+          {u.display_name ?? "Unknown"}
+        </span>
+      ),
+    })),
+  ]
+
+  useHotkeys([
+    ["meta+shift+,", () => flashCopy(setCopiedUrl, typeof window !== "undefined" ? window.location.href : "", "Issue URL copied")],
+    ["meta+.", () => flashCopy(setCopiedId, issueIdentifier, "Issue ID copied")],
+    ["meta+shift+.", () => flashCopy(setCopiedBranch, branchName, "Branch name copied")],
+    ["meta+alt+p", () => flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")],
+  ])
+
   return (
-    <div class="py-2 border-b border-border/20">
-      <div class="text-[11px] text-muted-foreground/50 mb-1 uppercase tracking-wider font-medium">
-        {props.label}
+    <div class="flex flex-col gap-2.5 p-3 h-full">
+      {/* Action icon buttons */}
+      <div class="flex items-center justify-end gap-1 px-0.5 pt-0.5">
+        {/* Copy issue URL */}
+        <Tippy content="Copy issue URL  ⌘⇧," props={{ placement: "bottom" }}>
+          <button
+            onClick={() => flashCopy(setCopiedUrl, typeof window !== "undefined" ? window.location.href : "", "Issue URL copied")}
+            class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Show when={copiedUrl()} fallback={<SidebarLinkIcon class="size-[15px]" />}>
+              <IconCheck class="size-[15px] text-green-400" />
+            </Show>
+          </button>
+        </Tippy>
+
+        {/* Copy issue ID */}
+        <Tippy content="Copy issue ID  ⌘." props={{ placement: "bottom" }}>
+          <button
+            onClick={() => flashCopy(setCopiedId, issueIdentifier, "Issue ID copied")}
+            class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Show when={copiedId()} fallback={<IdBadgeIcon class="size-[15px]" />}>
+              <IconCheck class="size-[15px] text-green-400" />
+            </Show>
+          </button>
+        </Tippy>
+
+        {/* Copy git branch name */}
+        <Tippy content="Copy git branch name  ⌘⇧." props={{ placement: "bottom" }}>
+          <button
+            onClick={() => flashCopy(setCopiedBranch, branchName, "Branch name copied")}
+            class="size-[33px] rounded-full flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.10] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Show when={copiedBranch()} fallback={<GitBranchIcon class="size-[15px]" />}>
+              <IconCheck class="size-[15px] text-green-400" />
+            </Show>
+          </button>
+        </Tippy>
+
+        {/* Copy as prompt (with chevron dropdown) */}
+        <div class="flex items-center rounded-full bg-white/[0.05] overflow-hidden">
+          <Tippy content="Copy as prompt  ⌘⌥P" props={{ placement: "bottom" }}>
+            <button
+              onClick={() => flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt")}
+              class="h-[33px] px-2 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors"
+            >
+              <Show when={copiedPrompt()} fallback={<CursorPromptIcon class="size-[15px]" />}>
+                <IconCheck class="size-[15px] text-green-400" />
+              </Show>
+            </button>
+          </Tippy>
+          <Popover open={promptMenuOpen()} onOpenChange={setPromptMenuOpen}>
+            <PopoverTrigger class="h-[33px] px-1.5 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors border-l border-white/[0.08]">
+              <IconChevronDown class="size-3" />
+            </PopoverTrigger>
+            <PopoverContent class="w-48 p-1">
+              <button
+                onClick={() => { flashCopy(setCopiedPrompt, buildPrompt(), "Copied as prompt"); setPromptMenuOpen(false) }}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] text-foreground hover:bg-white/[0.06] transition-colors text-left"
+              >
+                <CursorPromptIcon class="size-3.5 shrink-0 text-muted-foreground" />
+                Copy as prompt
+              </button>
+              <button
+                onClick={() => setPromptMenuOpen(false)}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] text-foreground hover:bg-white/[0.06] transition-colors text-left"
+              >
+                <GearIcon class="size-3.5 shrink-0 text-muted-foreground" />
+                Configure coding tools
+              </button>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
-      {props.children}
+
+      {/* Properties Card */}
+      <div class="rounded-xl bg-white/[0.04] overflow-hidden">
+        {/* Card header */}
+        <button
+          onclick={() => setPropertiesOpen((o) => !o)}
+          class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span class="font-medium">Properties</span>
+          <IconChevronDown
+            class={cn(
+              "size-3 shrink-0 transition-transform duration-200",
+              propertiesOpen() ? "rotate-0" : "-rotate-90"
+            )}
+          />
+        </button>
+
+        <Show when={propertiesOpen()}>
+          <div class="px-2 pb-2 space-y-0.5">
+            {/* Status */}
+            <SidebarCombobox
+              items={statusItems()}
+              selectedValue={props.issue?.status_id || ""}
+              onSelect={(v) => props.onStatusChange(v as string)}
+              searchPlaceholder="Search status..."
+              contentClass="w-56"
+            >
+              <StatusIcon category={currentStatus()?.category ?? null} class="size-[15px] shrink-0" />
+              <span class="font-medium text-foreground">{currentStatus()?.name ?? "No status"}</span>
+            </SidebarCombobox>
+
+            {/* Priority */}
+            <SidebarCombobox
+              items={priorityItems()}
+              selectedValue={(props.issue?.priority ?? 0).toString()}
+              onSelect={(v) => props.onPriorityChange(parseInt(v as string, 10))}
+              searchPlaceholder="Search priority..."
+              contentClass="w-52"
+            >
+              <PriorityIcon value={props.issue?.priority ?? 0} class="size-3.5 shrink-0" />
+              <span class={cn(currentPriority() === "none" ? "text-muted-foreground" : "font-medium text-foreground")}>
+                {currentPriority() === "none" ? "Set priority" : currentPriority().charAt(0).toUpperCase() + currentPriority().slice(1)}
+              </span>
+            </SidebarCombobox>
+
+            {/* Assignee */}
+            <SidebarCombobox
+              items={assigneeItems()}
+              selectedValue={iss.assignee_id || ""}
+              onSelect={(v) => props.onAssigneeChange((v as string) || null)}
+              searchPlaceholder="Assign to..."
+              contentClass="w-56"
+            >
+              <div class="size-[15px] rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                <span class="text-[8px] font-medium text-primary">
+                  {iss.assignee_name ? iss.assignee_name.charAt(0).toUpperCase() : "?"}
+                </span>
+              </div>
+              <span class={cn(iss.assignee_name ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {iss.assignee_name ?? "Assign"}
+              </span>
+            </SidebarCombobox>
+          </div>
+        </Show>
+      </div>
+
+      {/* Labels Card */}
+      <div class="rounded-xl bg-white/[0.04] overflow-hidden">
+        <button
+          onclick={() => setLabelsOpen((o) => !o)}
+          class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span class="font-medium">Labels</span>
+          <IconChevronDown
+            class={cn(
+              "size-3 shrink-0 transition-transform duration-200",
+              labelsOpen() ? "rotate-0" : "-rotate-90"
+            )}
+          />
+        </button>
+
+        <Show when={labelsOpen()}>
+          <div class="px-2 pb-2 space-y-1.5">
+            <Show when={props.labels.length > 0}>
+              <div class="px-2 flex flex-wrap gap-1.5">
+                <For each={props.labels}>
+                  {(label) => (
+                    <span
+                      class="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        color: label.color ?? "var(--muted-foreground)",
+                        "background-color": label.color ? `${label.color}22` : "rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      {label.name}
+                    </span>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <button class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors">
+              <IconTag class="size-3.5 shrink-0" />
+              <span>Add label</span>
+            </button>
+          </div>
+        </Show>
+      </div>
+
+      {/* Project Card */}
+      <div class="rounded-xl bg-white/[0.04] overflow-hidden">
+        <button
+          onclick={() => setProjectOpen((o) => !o)}
+          class="w-full flex items-center gap-1.5 px-3.5 pt-3 pb-2 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span class="font-medium">Project</span>
+          <IconChevronDown
+            class={cn(
+              "size-3 shrink-0 transition-transform duration-200",
+              projectOpen() ? "rotate-0" : "-rotate-90"
+            )}
+          />
+        </button>
+
+        <Show when={projectOpen()}>
+          <div class="px-2 pb-2">
+            <button class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors">
+              <IconProjects class="size-3.5 shrink-0" />
+              <span>Add to project</span>
+            </button>
+          </div>
+        </Show>
+      </div>
+
+      {/* Created/Updated — no card, just muted text at the bottom */}
+      <div class="mt-auto px-1 py-1 space-y-1.5">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-muted-foreground/50">Created</span>
+          <span class="text-muted-foreground/70">{formatDate(iss.created_at)}</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-muted-foreground/50">Updated</span>
+          <span class="text-muted-foreground/70">{formatDate(iss.updated_at)}</span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -383,72 +748,6 @@ function StatusBadge(props: { category: StatusCategory | null; name: string | nu
   )
 }
 
-function StatusIcon(props: { category: StatusCategory | null; class?: string }) {
-  switch (props.category) {
-    case "backlog":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-dasharray="3 2" />
-        </svg>
-      )
-    case "unstarted":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#9ca3af" stroke-width="1.5" fill="none" />
-        </svg>
-      )
-    case "started":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#f97316" stroke-width="1.5" fill="none" />
-          <path d="M8 1.5 A6.5 6.5 0 0 1 14.5 8" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-    case "completed":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#22c55e" stroke-width="1.5" fill="#22c55e" fill-opacity="0.15" />
-          <path d="M5 8 L7.2 10.2 L11 6" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        </svg>
-      )
-    case "cancelled":
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" />
-          <path d="M5.5 5.5 L10.5 10.5 M10.5 5.5 L5.5 10.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" fill="none" />
-        </svg>
-      )
-    default:
-      return (
-        <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-dasharray="3 2" />
-        </svg>
-      )
-  }
-}
-
-function PriorityIcon(props: { priority: Priority; class?: string }) {
-  const colors: Record<Priority, string> = {
-    urgent: "#ef4444",
-    high:   "#f97316",
-    medium: "#eab308",
-    low:    "#6b7280",
-    none:   "transparent",
-  }
-  return (
-    <svg viewBox="0 0 16 16" class={props.class} aria-hidden="true">
-      <Show when={props.priority !== "none"}>
-        <rect x="1" y="8" width="2.5" height="6" rx="0.5" fill={colors[props.priority]} opacity="0.5" />
-        <rect x="5" y="5" width="2.5" height="9" rx="0.5" fill={colors[props.priority]} opacity="0.7" />
-        <rect x="9" y="2" width="2.5" height="12" rx="0.5" fill={colors[props.priority]} />
-      </Show>
-      <Show when={props.priority === "none"}>
-        <circle cx="8" cy="8" r="2" fill="#4b5563" />
-      </Show>
-    </svg>
-  )
-}
-
 function LinkIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -468,6 +767,64 @@ function TrashIcon(props: { class?: string }) {
       <path d="M3 6h18" />
       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    </svg>
+  )
+}
+
+function SidebarLinkIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class={props.class} aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  )
+}
+
+function IdBadgeIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class={props.class} aria-hidden="true">
+      <rect x="2" y="4" width="20" height="16" rx="3" ry="3" />
+      <path d="M9 10h.01" />
+      <path d="M15 10h.01" />
+      <path d="M9 14h6" />
+    </svg>
+  )
+}
+
+function GitBranchIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class={props.class} aria-hidden="true">
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  )
+}
+
+function CursorPromptIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class={props.class} aria-hidden="true">
+      <path d="M5 3l14 9-7 1-3 7z" />
+    </svg>
+  )
+}
+
+function GearIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class={props.class} aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }
