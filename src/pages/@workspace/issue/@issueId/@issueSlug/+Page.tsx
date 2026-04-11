@@ -16,6 +16,7 @@ import {
   IconInfo,
   IconUserCircleDashed,
   IconStar,
+  IconStarFill,
   IconMoreHorizontal,
   IconCalendarPlus,
   IconLink,
@@ -81,6 +82,7 @@ type IssueRow = {
   team_id: string | null
   team_name: string
   team_identifier: string
+  workspace_id: string | null
   status_id: string | null
   status_name: string | null
   status_category: StatusCategory | null
@@ -190,7 +192,7 @@ export default function IssueDetailPage() {
         i.id, i.title, i.description, i.description_html,
         i.priority, i.due_date, i.created_at, i.updated_at, i.number,
         i.team_id, i.status_id, i.assignee_id,
-        t.name as team_name, t.identifier as team_identifier,
+        t.name as team_name, t.identifier as team_identifier, t.workspace_id as workspace_id,
         ws.name as status_name, ws.category as status_category, ws.color as status_color,
         u.display_name as assignee_name, u.avatar_url as assignee_avatar
       FROM issue i
@@ -361,7 +363,39 @@ export default function IssueDetailPage() {
 
   const [comment, setComment] = createSignal("")
   const [copied, setCopied] = createSignal(false)
-  const [isFavorite, setIsFavorite] = createSignal(false)
+
+  const [favoriteRows] = usePowerSyncQuery<{ id: string }>(
+    () => `
+      SELECT id FROM favorite
+      WHERE user_id = ? AND target_type = 'issue' AND target_id = ?
+      LIMIT 1
+    `,
+    () => [currentUser()?.id ?? "", issue()?.id ?? ""]
+  )
+  const isFavorite = () => favoriteRows().length > 0
+
+  async function toggleFavorite() {
+    const iss = issue()
+    const user = currentUser()
+    if (!iss || !user) return
+    const existing = favoriteRows()[0]
+    if (existing) {
+      await execute("DELETE FROM favorite WHERE id = ?", [existing.id])
+    } else {
+      await execute(
+        `INSERT INTO favorite (id, user_id, workspace_id, target_type, target_id, sort_order, created_at)
+         VALUES (?, ?, ?, 'issue', ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          user.id,
+          iss.workspace_id ?? "",
+          iss.id,
+          Date.now(),
+          new Date().toISOString(),
+        ]
+      )
+    }
+  }
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href)
@@ -437,13 +471,20 @@ export default function IssueDetailPage() {
                 >
                   <button
                     type="button"
-                    onClick={() => setIsFavorite(!isFavorite())}
+                    onClick={toggleFavorite}
                     class={cn(
-                      "p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors",
-                      isFavorite() && "text-yellow-500"
+                      "p-1.5 rounded transition-colors",
+                      isFavorite()
+                        ? "text-yellow-500 hover:text-yellow-400"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    <IconStar class={cn("size-4", isFavorite() && "fill-current")} />
+                    <Show
+                      when={isFavorite()}
+                      fallback={<IconStar class="size-4" />}
+                    >
+                      <IconStarFill class="size-4" />
+                    </Show>
                   </button>
                 </Tippy>
 
@@ -541,8 +582,13 @@ export default function IssueDetailPage() {
                     </DropdownMenuItem>
 
                     {/* Favorite */}
-                    <DropdownMenuItem class="gap-2" onSelect={() => setIsFavorite(!isFavorite())}>
-                      <IconStar class="size-4 text-muted-foreground" />
+                    <DropdownMenuItem class="gap-2" onSelect={toggleFavorite}>
+                      <Show
+                        when={isFavorite()}
+                        fallback={<IconStar class="size-4 text-muted-foreground" />}
+                      >
+                        <IconStarFill class="size-4 text-yellow-500" />
+                      </Show>
                       {isFavorite() ? "Unfavorite" : "Favorite"}
                       <DropdownMenuShortcut>⌥ F</DropdownMenuShortcut>
                     </DropdownMenuItem>

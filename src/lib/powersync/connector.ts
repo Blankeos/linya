@@ -36,6 +36,9 @@ export class BackendConnector implements PowerSyncBackendConnector {
           case "issue":
             await this.uploadIssue(entry)
             break
+          case "favorite":
+            await this.uploadViaGenericSync(entry)
+            break
           default:
             console.warn("[PowerSync] uploadData not implemented for table:", entry.table)
         }
@@ -45,6 +48,26 @@ export class BackendConnector implements PowerSyncBackendConnector {
       console.error("[PowerSync] Upload error:", error)
       throw error
     }
+  }
+
+  private async uploadViaGenericSync(entry: CrudEntry): Promise<void> {
+    const client = honoClient()
+    const opType =
+      entry.op === UpdateType.PUT
+        ? "PUT"
+        : entry.op === UpdateType.PATCH
+          ? "PATCH"
+          : "DELETE"
+    await client.sync.upload.$post({
+      json: {
+        operation: {
+          op: opType,
+          table: entry.table,
+          id: entry.id,
+          opData: entry.opData ?? undefined,
+        },
+      },
+    })
   }
 
   private async uploadIssue(entry: CrudEntry): Promise<void> {

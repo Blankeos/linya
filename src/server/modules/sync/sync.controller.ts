@@ -22,6 +22,7 @@ const ALLOWED_TABLES = new Set([
   "comments",
   "reactions",
   "documents",
+  "favorite",
 ])
 
 // Map plural table names (PowerSync convention) to DB table names
@@ -31,6 +32,7 @@ const TABLE_MAP: Record<string, string> = {
   comments: "comment",
   reactions: "reaction",
   documents: "document",
+  favorite: "favorite",
 }
 
 async function handleOperation(op: SyncOperation, userId: string): Promise<void> {

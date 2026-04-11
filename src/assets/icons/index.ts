@@ -63,3 +63,4 @@ export { default as IconGitBranch } from "./lucide:git-branch.svg"
 export { default as IconClock } from "./lucide:clock.svg"
 export { default as IconHistory } from "./lucide:history.svg"
 export { default as IconTrash2 } from "./lucide:trash-2.svg"
+export { default as IconStarFill } from './mingcute:star-fill.svg';

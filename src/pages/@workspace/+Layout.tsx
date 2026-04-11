@@ -2,13 +2,14 @@ import { createSignal, For, Show, type FlowProps } from "solid-js"
 import { usePageContext } from "vike-solid/usePageContext"
 import { navigate } from "vike/client/router"
 import { useAuthContext } from "@/context/auth.context"
-import { useDisclosure } from "bagon-hooks"
+import { useDisclosure, useMounted } from "bagon-hooks"
 import { CommandMenu } from "@/components/command-menu"
 import { NewIssueModal } from "@/components/new-issue-modal"
 import { NewProjectModal } from "@/components/new-project-modal"
 import { newProjectOpen, setNewProjectOpen } from "@/stores/workspace-ui"
 import { DropdownMenuComp } from "@/components/ui/dropdown-menu"
 import { usePowerSyncQuery } from "@/lib/powersync"
+import { ConnectionStatusBadge, useConnectionStatus } from "@/components/connection-status-badge"
 import {
   IconPulse,
   IconInbox,
@@ -37,7 +38,20 @@ import {
   IconSlack,
   IconEllipsis,
   IconPlus,
+  IconStarFill,
 } from "@/assets/icons"
+
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 48) || "untitled"
+  )
+}
 
 // Team Accordion Item Component
 type Team = {
@@ -209,6 +223,12 @@ export default function WorkspaceLayout(props: FlowProps) {
   const auth = useAuthContext()
   const pageCtx = usePageContext()
   const workspaceSlug = () => (pageCtx.routeParams as Record<string, string>).workspace ?? ""
+  const connectionStatus = useConnectionStatus()
+  const mounted = useMounted()
+  // Gate sync-status driven UI behind a mount check so SSR always renders the
+  // "online" branch and we don't get a hydration mismatch when the client
+  // initializes PowerSync with a different syncStatus.
+  const effectiveStatus = () => (mounted() ? connectionStatus() : null)
 
   const [newIssueOpen, newIssueActions] = useDisclosure()
   const [workspaceExpanded, setWorkspaceExpanded] = createSignal(true)
@@ -229,6 +249,25 @@ export default function WorkspaceLayout(props: FlowProps) {
       ORDER BY t.name ASC
     `,
     () => [workspaceSlug()]
+  )
+
+  const [favoriteIssues] = usePowerSyncQuery<{
+    id: string
+    number: number
+    title: string
+    team_identifier: string
+    sort_order: number
+  }>(
+    () => `
+      SELECT i.id, i.number, i.title, t.identifier as team_identifier, f.sort_order as sort_order
+      FROM favorite f
+      JOIN issue i ON f.target_id = i.id
+      JOIN team t ON i.team_id = t.id
+      JOIN workspace w ON f.workspace_id = w.id
+      WHERE f.user_id = ? AND f.target_type = 'issue' AND w.slug = ?
+      ORDER BY f.sort_order ASC, f.created_at ASC
+    `,
+    () => [auth.user()?.id ?? "", workspaceSlug()]
   )
 
   const isActive = (path: string) => {
@@ -260,100 +299,115 @@ export default function WorkspaceLayout(props: FlowProps) {
           >
             {/* Workspace header */}
             <div class="flex items-center gap-2 px-3 py-3 shrink-0">
-              <DropdownMenuComp
-                options={[
-                  {
-                    type: "item",
-                    itemDisplay: "Settings",
-                    itemOnSelect: () => navigate(`/${workspaceSlug()}/settings`),
-                    itemTip: <span>G then S</span>,
-                  },
-                  {
-                    type: "item",
-                    itemDisplay: "Download desktop app",
-                    itemOnSelect: () => {},
-                  },
-                  {
-                    type: "sub",
-                    subTrigger: "Switch workspace",
-                    subOptions: [
+              {/* Org avatar — always visible */}
+              <div class="size-6 rounded bg-primary flex items-center justify-center shrink-0">
+                <span class="text-[10px] font-bold text-white">
+                  {workspaceSlug()[0]?.toUpperCase() ?? "W"}
+                </span>
+              </div>
+
+              {/* When online: show org name + dropdown. When offline: show badge instead */}
+              <Show
+                when={effectiveStatus()}
+                fallback={
+                  <DropdownMenuComp
+                    options={[
                       {
                         type: "item",
-                        itemDisplay: (
-                          <span class="text-xs text-muted-foreground/50">{auth.user()?.email}</span>
-                        ),
-                        itemOnSelect: () => {},
+                        itemDisplay: "Settings",
+                        itemOnSelect: () => navigate(`/${workspaceSlug()}/settings`),
+                        itemTip: <span>G then S</span>,
                       },
                       {
                         type: "item",
-                        itemDisplay: (
-                          <div class="flex items-center gap-2">
-                            <div class="size-5 rounded bg-primary flex items-center justify-center shrink-0">
-                              <span class="text-[9px] font-bold text-white">
-                                {workspaceSlug()[0]?.toUpperCase() ?? "W"}
+                        itemDisplay: "Download desktop app",
+                        itemOnSelect: () => {},
+                      },
+                      {
+                        type: "sub",
+                        subTrigger: "Switch workspace",
+                        subOptions: [
+                          {
+                            type: "item",
+                            itemDisplay: (
+                              <span class="text-xs text-muted-foreground/50">
+                                {auth.user()?.email}
                               </span>
-                            </div>
-                            <span class="capitalize font-medium">{workspaceSlug()}</span>
-                          </div>
-                        ),
-                        itemOnSelect: () => {},
-                        itemTip: (
-                          <span class="flex items-center gap-1">
-                            <span>✓</span> <span>1</span>
-                          </span>
-                        ),
+                            ),
+                            itemOnSelect: () => {},
+                          },
+                          {
+                            type: "item",
+                            itemDisplay: (
+                              <div class="flex items-center gap-2">
+                                <div class="size-5 rounded bg-primary flex items-center justify-center shrink-0">
+                                  <span class="text-[9px] font-bold text-white">
+                                    {workspaceSlug()[0]?.toUpperCase() ?? "W"}
+                                  </span>
+                                </div>
+                                <span class="capitalize font-medium">{workspaceSlug()}</span>
+                              </div>
+                            ),
+                            itemOnSelect: () => {},
+                            itemTip: (
+                              <span class="flex items-center gap-1">
+                                <span>✓</span> <span>1</span>
+                              </span>
+                            ),
+                          },
+                          { type: "separator" },
+                          {
+                            type: "item",
+                            itemDisplay: (
+                              <span class="text-xs text-muted-foreground/70">Account</span>
+                            ),
+                            itemOnSelect: () => {},
+                          },
+                          {
+                            type: "item",
+                            itemDisplay: (
+                              <span class="text-xs text-muted-foreground/70">
+                                Create or join a workspace...
+                              </span>
+                            ),
+                            itemOnSelect: () => {},
+                          },
+                          {
+                            type: "item",
+                            itemDisplay: (
+                              <span class="text-xs text-muted-foreground/70">
+                                Add an account...
+                              </span>
+                            ),
+                            itemOnSelect: () => {},
+                          },
+                        ],
                       },
-                      { type: "separator" },
                       {
                         type: "item",
-                        itemDisplay: <span class="text-xs text-muted-foreground/70">Account</span>,
-                        itemOnSelect: () => {},
+                        itemDisplay: "Log out",
+                        itemOnSelect: async () => {
+                          await auth.logout()
+                          navigate("/")
+                        },
+                        itemTip: <span>⌘ ⇧ Q</span>,
                       },
-                      {
-                        type: "item",
-                        itemDisplay: (
-                          <span class="text-xs text-muted-foreground/70">
-                            Create or join a workspace...
-                          </span>
-                        ),
-                        itemOnSelect: () => {},
-                      },
-                      {
-                        type: "item",
-                        itemDisplay: (
-                          <span class="text-xs text-muted-foreground/70">Add an account...</span>
-                        ),
-                        itemOnSelect: () => {},
-                      },
-                    ],
-                  },
-                  {
-                    type: "item",
-                    itemDisplay: "Log out",
-                    itemOnSelect: async () => {
-                      await auth.logout()
-                      navigate("/")
-                    },
-                    itemTip: <span>⌘ ⇧ Q</span>,
-                  },
-                ]}
-                triggerProps={{
-                  class:
-                    "flex items-center gap-2 w-auto px-2 py-1 rounded hover:bg-white/5 transition-colors cursor-pointer",
-                }}
-              >
-                <div class="flex items-center gap-2 w-auto">
-                  <div class="size-6 rounded bg-primary flex items-center justify-center shrink-0">
-                    <span class="text-[10px] font-bold text-white">
-                      {workspaceSlug()[0]?.toUpperCase() ?? "W"}
+                    ]}
+                    triggerProps={{
+                      class:
+                        "flex items-center gap-1 py-1 rounded hover:bg-white/5 transition-colors cursor-pointer",
+                    }}
+                  >
+                    <span class="text-[13px] font-semibold text-foreground capitalize">
+                      {workspaceSlug()}
                     </span>
-                  </div>
-                  <span class="text-[13px] font-semibold text-foreground capitalize">
-                    {workspaceSlug()}
-                  </span>
-                  <IconChevronDown class="size-3.5 text-muted-foreground shrink-0" />
-                </div>
-              </DropdownMenuComp>
+                    <IconChevronDown class="size-3.5 text-muted-foreground shrink-0" />
+                  </DropdownMenuComp>
+                }
+              >
+                {(status) => <ConnectionStatusBadge status={status()} />}
+              </Show>
+
               <div class="flex-1" />
               <IconSearch class="size-3.5 text-muted-foreground shrink-0 cursor-pointer hover:text-foreground" />
               <button type="button" onClick={() => newIssueActions.open()}>
@@ -499,10 +553,35 @@ export default function WorkspaceLayout(props: FlowProps) {
                   Favorites
                 </button>
                 <Show when={favoritesExpanded()}>
-                  <div class="mt-0.5">
-                    <div class="px-2 py-1.5 text-[12px] text-muted-foreground/50 italic">
-                      Star issues and projects to add them here
-                    </div>
+                  <div class="mt-0.5 space-y-0.5">
+                    <Show
+                      when={favoriteIssues().length > 0}
+                      fallback={
+                        <div class="px-2 py-1.5 text-[12px] text-muted-foreground/50 italic">
+                          Star issues and projects to add them here
+                        </div>
+                      }
+                    >
+                      <For each={favoriteIssues()}>
+                        {(fav) => {
+                          const path = () =>
+                            `/${workspaceSlug()}/issue/${fav.team_identifier}-${fav.number}/${slugify(fav.title)}`
+                          return (
+                            <a
+                              href={path()}
+                              class={`flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors w-full select-none ${
+                                isActive(path())
+                                  ? "bg-white/[0.08] text-foreground"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                              }`}
+                            >
+                              <IconStarFill class="size-3.5 shrink-0 text-yellow-500" />
+                              <span class="truncate">{fav.title}</span>
+                            </a>
+                          )
+                        }}
+                      </For>
+                    </Show>
                   </div>
                 </Show>
               </div>

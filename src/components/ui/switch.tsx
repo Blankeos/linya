@@ -102,3 +102,37 @@ const SwitchComp = (props: SwitchCompProps) => {
 }
 
 export { SwitchComp }
+
+// ---
+
+type SwitchCompactProps = ComponentProps<typeof Switch> & {
+  label?: JSX.Element
+  labelProps?: SwitchLabelProps
+}
+
+/**
+ * Compact variant — 22×14px track. Renders label on left, toggle on right.
+ * Designed for dense settings rows (e.g. Display popover).
+ */
+const SwitchCompact = (props: SwitchCompactProps) => {
+  const [local, others] = splitProps(props, ["label", "labelProps"])
+  const label = children(() => local.label)
+
+  return (
+    <SwitchPrimitive.Root class={cn("flex items-center justify-between", others.class)} {...others}>
+      <Show when={label()}>
+        <SwitchLabel
+          class="cursor-pointer text-[13px] font-normal leading-none"
+          {...local.labelProps}
+        >
+          {label()}
+        </SwitchLabel>
+      </Show>
+      <SwitchControl class="h-3.5 w-[22px]">
+        <SwitchThumb class="size-2.5 data-[checked]:translate-x-2" />
+      </SwitchControl>
+    </SwitchPrimitive.Root>
+  )
+}
+
+export { SwitchCompact }

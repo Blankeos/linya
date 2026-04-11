@@ -2,9 +2,13 @@
  * Shared components, types, constants, and helpers for issues list/board views.
  * Used by both My Issues and Team Issues pages.
  */
-import { createSignal, For, Show } from "solid-js"
+
+import type { JSX } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch as SolidSwitch } from "solid-js"
+import { PriorityIcon, StatusIcon } from "@/components/issue-fields"
 import { PopoverComp } from "@/components/ui/popover"
-import { StatusIcon, PriorityIcon } from "@/components/issue-fields"
+import { SwitchCompact } from "@/components/ui/switch"
+import { cn } from "@/utils/cn"
 
 // ============================================================
 // Types
@@ -232,10 +236,10 @@ export function IssueGroup(props: {
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
-        class="sticky top-0 flex w-full items-center gap-2 border-b border-border/20 bg-background/50 px-4 py-2 transition-colors hover:bg-white/[0.02]"
+        class="sticky top-0 flex w-full items-center gap-2 border-border/20 border-b bg-background/50 px-4 py-2 transition-colors hover:bg-white/[0.02]"
       >
         <StatusIcon category={props.category} class="size-3.5 shrink-0" />
-        <span class="text-[12px] font-medium text-muted-foreground">{props.label}</span>
+        <span class="font-medium text-[12px] text-muted-foreground">{props.label}</span>
         <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/50">
           {props.issues.length}
         </span>
@@ -266,7 +270,7 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
   return (
     <a
       href={`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`}
-      class="group flex cursor-pointer items-center gap-3 border-b border-border/30 px-4 py-1.5 hover:bg-white/[0.03]"
+      class="group flex cursor-pointer items-center gap-3 border-border/30 border-b px-4 py-1.5 hover:bg-white/[0.03]"
     >
       <PriorityIcon value={issue().priority} class="size-3.5 shrink-0" />
       <StatusIcon
@@ -303,7 +307,7 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
         }
       >
         <div class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20">
-          <span class="text-[9px] font-medium text-primary">
+          <span class="font-medium text-[9px] text-primary">
             {issue().assignee_name!.charAt(0).toUpperCase()}
           </span>
         </div>
@@ -322,13 +326,13 @@ export function BoardView(props: { columns: BoardColumn[]; workspaceSlug: string
       <For each={props.columns}>
         {(column) => (
           <div class="flex w-[280px] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30">
-            <div class="flex items-center gap-2 border-b border-border/30 px-3 py-2">
+            <div class="flex items-center gap-2 border-border/30 border-b px-3 py-2">
               <StatusIcon
                 category={column.category}
                 color={column.color}
                 class="size-3.5 shrink-0"
               />
-              <span class="flex-1 text-[12px] font-medium text-foreground">{column.name}</span>
+              <span class="flex-1 font-medium text-[12px] text-foreground">{column.name}</span>
               <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground">
                 {column.issues.length}
               </span>
@@ -363,7 +367,7 @@ export function BoardCard(props: { issue: IssueRow; workspaceSlug: string }) {
     >
       <div class="flex items-start gap-2">
         <PriorityIcon value={issue().priority} class="mt-0.5 size-3.5 shrink-0" />
-        <span class="flex-1 text-[13px] leading-snug text-foreground">{issue().title}</span>
+        <span class="flex-1 text-[13px] text-foreground leading-snug">{issue().title}</span>
       </div>
       <div class="flex items-center gap-2">
         <span class="font-mono text-[11px] text-muted-foreground/60">{identifier()}</span>
@@ -391,7 +395,7 @@ export function BoardCard(props: { issue: IssueRow; workspaceSlug: string }) {
           }
         >
           <div class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20">
-            <span class="text-[9px] font-medium text-primary">
+            <span class="font-medium text-[9px] text-primary">
               {issue().assignee_name!.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -546,7 +550,7 @@ export function FilterPopover() {
       contentProps={{ class: "p-0 w-[220px] border-border/60 bg-popover shadow-xl" }}
       content={
         <div>
-          <div class="flex items-center border-b border-border/40 px-3 py-2">
+          <div class="flex items-center border-border/40 border-b px-3 py-2">
             <input
               type="text"
               placeholder="Add Filter..."
@@ -612,18 +616,34 @@ export function FilterPopover() {
 // DisplayPopover — controls list/board toggle + display settings
 // ============================================================
 
-function SwitchRoot(props: { checked: boolean; onChange: (v: boolean) => void }) {
+function DropdownButton(props: { label: string }) {
   return (
     <button
       type="button"
-      onClick={() => props.onChange(!props.checked)}
-      class={`relative h-5 w-9 rounded-full transition-colors ${props.checked ? "bg-primary" : "bg-muted"}`}
+      class="flex items-center gap-1 rounded border border-border/30 bg-muted/30 px-2 py-1 text-[12px] text-foreground transition-colors hover:bg-muted/50"
     >
-      <span
-        class="absolute top-0.5 size-4 rounded-full bg-background shadow-sm transition-transform"
-        style={{ transform: props.checked ? "translateX(18px)" : "translateX(2px)" }}
-      />
+      {props.label}
+      <svg
+        viewBox="0 0 16 16"
+        class="size-3 text-muted-foreground/60"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <path d="M4 6 L8 10 L12 6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     </button>
+  )
+}
+
+function DisplaySwitch(props: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <SwitchCompact
+      checked={props.checked}
+      onChange={props.onChange}
+      label={props.label}
+      labelProps={{ class: "text-[13px] font-normal text-muted-foreground" }}
+    />
   )
 }
 
@@ -632,7 +652,10 @@ export function DisplayPopover(props: {
   onViewChange: (view: "list" | "board") => void
 }) {
   const [showSubIssues, setShowSubIssues] = createSignal(true)
+  const [orderByRecency, setOrderByRecency] = createSignal(false)
+  const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
   const [nestedSubIssues, setNestedSubIssues] = createSignal(false)
+  const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
   const [activeProps, setActiveProps] = createSignal<Set<DisplayProp>>(
     new Set(DEFAULT_ACTIVE_PROPS)
   )
@@ -646,78 +669,27 @@ export function DisplayPopover(props: {
     })
   }
 
+  const isList = () => props.view === "list"
+
   return (
     <PopoverComp
       placement="bottom-end"
-      contentProps={{ class: "p-0 w-[300px] border-border/60 bg-popover shadow-xl" }}
+      contentProps={{ class: "p-0 w-[296px] border-border/60 bg-popover shadow-xl" }}
       content={
-        <div class="space-y-3 p-3">
-          {/* List / Board toggle */}
-          <div class="flex items-center gap-1 rounded-lg bg-muted/30 p-1">
-            <button
-              type="button"
-              onClick={() => props.onViewChange("list")}
-              class={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[13px] font-medium transition-colors ${props.view === "list" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                class="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <line x1="3" y1="5" x2="13" y2="5" stroke-linecap="round" />
-                <line x1="3" y1="8" x2="13" y2="8" stroke-linecap="round" />
-                <line x1="3" y1="11" x2="13" y2="11" stroke-linecap="round" />
-              </svg>
-              List
-            </button>
-            <button
-              type="button"
-              onClick={() => props.onViewChange("board")}
-              class={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[13px] font-medium transition-colors ${props.view === "board" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                class="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <rect x="2" y="3" width="4" height="10" rx="1" />
-                <rect x="7.5" y="3" width="4" height="7" rx="1" />
-              </svg>
-              Board
-            </button>
-          </div>
-
-          <div class="h-px bg-border/30" />
-
-          <div class="flex items-center justify-between">
-            <span class="text-[13px] text-muted-foreground">Grouping</span>
-            <button
-              type="button"
-              class="flex items-center gap-1 rounded border border-border/30 bg-muted/30 px-2 py-1 text-[13px] text-foreground transition-colors hover:bg-muted/50"
-            >
-              No grouping
-              <svg
-                viewBox="0 0 16 16"
-                class="size-3 text-muted-foreground/60"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M4 6 L8 10 L12 6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <span class="text-[13px] text-muted-foreground">Ordering</span>
-            <div class="flex items-center gap-1">
+        <div>
+          {/* Section 1: view toggle + layout options */}
+          <div class="space-y-3 p-3">
+            {/* List / Board toggle — two standalone pills, no shared container */}
+            <div class={cn("flex items-center gap-2")}>
               <button
                 type="button"
-                class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                onClick={() => props.onViewChange("list")}
+                class={cn(
+                  "flex h-7.75 w-33 items-center justify-center gap-2 rounded-full border border-border/40 font-medium text-[13px] transition-colors",
+                  isList()
+                    ? "bg-secondary text-foreground"
+                    : "bg-secondary/30 text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                )}
               >
                 <svg
                   viewBox="0 0 16 16"
@@ -726,86 +698,167 @@ export function DisplayPopover(props: {
                   stroke="currentColor"
                   stroke-width="1.5"
                 >
-                  <path
-                    d="M3 4 L3 12 M3 12 L6 9 M3 12 L0 9"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    transform="translate(3,0)"
-                  />
-                  <line x1="7" y1="5" x2="13" y2="5" stroke-linecap="round" />
-                  <line x1="7" y1="8" x2="11" y2="8" stroke-linecap="round" />
-                  <line x1="7" y1="11" x2="9" y2="11" stroke-linecap="round" />
+                  <line x1="3" y1="5" x2="13" y2="5" stroke-linecap="round" />
+                  <line x1="3" y1="8" x2="13" y2="8" stroke-linecap="round" />
+                  <line x1="3" y1="11" x2="13" y2="11" stroke-linecap="round" />
                 </svg>
+                List
               </button>
               <button
                 type="button"
-                class="flex items-center gap-1 rounded border border-border/30 bg-muted/30 px-2 py-1 text-[13px] text-foreground transition-colors hover:bg-muted/50"
+                onClick={() => props.onViewChange("board")}
+                class={cn(
+                  "flex h-7.75 w-33 items-center justify-center gap-2 rounded-full border border-border/40 font-medium text-[13px] transition-colors",
+                  !isList()
+                    ? "bg-secondary text-foreground"
+                    : "bg-secondary/30 text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                )}
               >
-                Created
                 <svg
                   viewBox="0 0 16 16"
-                  class="size-3 text-muted-foreground/60"
+                  class="size-3.5"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="1.5"
                 >
-                  <path d="M4 6 L8 10 L12 6" stroke-linecap="round" stroke-linejoin="round" />
+                  <rect x="2" y="3" width="4" height="10" rx="1" />
+                  <rect x="7.5" y="3" width="4" height="7" rx="1" />
                 </svg>
+                Board
               </button>
             </div>
+
+            {/* Grouping / Columns — label differs by view */}
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] text-muted-foreground">
+                {isList() ? "Grouping" : "Columns"}
+              </span>
+              <DropdownButton label="Status" />
+            </div>
+
+            {/* Sub-grouping / Rows — label differs by view */}
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] text-muted-foreground">
+                {isList() ? "Sub-grouping" : "Rows"}
+              </span>
+              <DropdownButton label="No grouping" />
+            </div>
+
+            {/* Ordering */}
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] text-muted-foreground">Ordering</span>
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    class="size-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M6 4 L6 12 M6 12 L3.5 9.5 M6 12 L8.5 9.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <line x1="9" y1="5" x2="14" y2="5" stroke-linecap="round" />
+                    <line x1="9" y1="8" x2="13" y2="8" stroke-linecap="round" />
+                    <line x1="9" y1="11" x2="12" y2="11" stroke-linecap="round" />
+                  </svg>
+                </button>
+                <DropdownButton label="Priority" />
+              </div>
+            </div>
+
+            <DisplaySwitch
+              label="Order completed by recency"
+              checked={orderByRecency()}
+              onChange={setOrderByRecency}
+            />
           </div>
 
           <div class="h-px bg-border/30" />
 
-          <div class="flex items-center justify-between">
-            <span class="text-[13px] text-muted-foreground">Completed issues</span>
+          {/* Section 2: issue visibility */}
+          <div class="space-y-3 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] text-muted-foreground">Completed issues</span>
+              <DropdownButton label="All" />
+            </div>
+            <DisplaySwitch
+              label="Show sub-issues"
+              checked={showSubIssues()}
+              onChange={setShowSubIssues}
+            />
+          </div>
+
+          <div class="h-px bg-border/30" />
+
+          {/* Section 3: view-specific options + display props */}
+          <div class="space-y-3 p-3">
+            <Show
+              when={isList()}
+              fallback={
+                <>
+                  <p class="font-semibold text-[13px] text-foreground">Board options</p>
+                  <DisplaySwitch
+                    label="Show empty columns"
+                    checked={showEmptyColumns()}
+                    onChange={setShowEmptyColumns}
+                  />
+                </>
+              }
+            >
+              <p class="font-semibold text-[13px] text-foreground">List options</p>
+              <DisplaySwitch
+                label="Nested sub-issues"
+                checked={nestedSubIssues()}
+                onChange={setNestedSubIssues}
+              />
+              <DisplaySwitch
+                label="Show empty groups"
+                checked={showEmptyGroups()}
+                onChange={setShowEmptyGroups}
+              />
+            </Show>
+
+            <div>
+              <p class="mb-2 text-[13px] text-muted-foreground">Display properties</p>
+              <div class="flex flex-wrap gap-1.5">
+                <For each={ALL_DISPLAY_PROPS}>
+                  {(prop) => (
+                    <button
+                      type="button"
+                      onClick={() => toggleProp(prop)}
+                      class={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${activeProps().has(prop) ? "border-foreground/30 bg-foreground/10 font-medium text-foreground" : "border-border/30 text-muted-foreground/50 hover:border-border/50 hover:text-muted-foreground"}`}
+                    >
+                      {prop}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-px bg-border/30" />
+
+          {/* Footer */}
+          <div class="flex items-center justify-between px-3 py-2">
             <button
               type="button"
-              class="flex items-center gap-1 rounded border border-border/30 bg-muted/30 px-2 py-1 text-[13px] text-foreground transition-colors hover:bg-muted/50"
+              class="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
             >
-              All
-              <svg
-                viewBox="0 0 16 16"
-                class="size-3 text-muted-foreground/60"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M4 6 L8 10 L12 6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              Reset
             </button>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <span class="text-[13px] text-muted-foreground">Show sub-issues</span>
-            <SwitchRoot checked={showSubIssues()} onChange={setShowSubIssues} />
-          </div>
-
-          <div class="h-px bg-border/30" />
-
-          <div>
-            <p class="mb-2 text-[12px] font-semibold text-foreground">List options</p>
-            <div class="flex items-center justify-between">
-              <span class="text-[13px] text-muted-foreground">Nested sub-issues</span>
-              <SwitchRoot checked={nestedSubIssues()} onChange={setNestedSubIssues} />
-            </div>
-          </div>
-
-          <div>
-            <p class="mb-2 text-[13px] text-muted-foreground">Display properties</p>
-            <div class="flex flex-wrap gap-1.5">
-              <For each={ALL_DISPLAY_PROPS}>
-                {(prop) => (
-                  <button
-                    type="button"
-                    onClick={() => toggleProp(prop)}
-                    class={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${activeProps().has(prop) ? "border-foreground/30 bg-foreground/10 font-medium text-foreground" : "border-border/30 text-muted-foreground/50 hover:border-border/50 hover:text-muted-foreground"}`}
-                  >
-                    {prop}
-                  </button>
-                )}
-              </For>
-            </div>
+            <button
+              type="button"
+              class="text-[13px] text-primary transition-colors hover:text-primary/80"
+            >
+              Set default for everyone
+            </button>
           </div>
         </div>
       }
@@ -836,12 +889,12 @@ export function ViewPopover() {
       contentProps={{ class: "p-0 w-[260px] border-border/60 bg-popover shadow-xl" }}
       content={
         <div>
-          <div class="flex items-center gap-1 border-b border-border/30 p-2">
+          <div class="flex items-center gap-1 border-border/30 border-b p-2">
             {(["labels", "priority", "projects"] as ViewTab[]).map((t) => (
               <button
                 type="button"
                 onClick={() => setViewTab(t)}
-                class={`rounded-full px-3 py-1.5 text-[13px] font-medium capitalize transition-colors ${viewTab() === t ? "bg-muted/60 text-foreground" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"}`}
+                class={`rounded-full px-3 py-1.5 font-medium text-[13px] capitalize transition-colors ${viewTab() === t ? "bg-muted/60 text-foreground" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"}`}
               >
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
@@ -1003,5 +1056,149 @@ function LayoutIcon(props: { class?: string }) {
       <path d="M3 9h18" />
       <path d="M9 21V9" />
     </svg>
+  )
+}
+
+// ============================================================
+// IssuesPage — shared root component for My Issues + Team Issues
+// ============================================================
+
+export type IssuesPageTab = {
+  label: string
+  value: string
+  href?: string
+  onClick?: () => void
+}
+
+export function IssuesPage(props: {
+  header: JSX.Element
+  tabs: IssuesPageTab[]
+  activeTab: string
+  extraTabControls?: JSX.Element
+  issues: IssueRow[]
+  emptyText: string
+  onNewIssue: () => void
+  workspaceSlug: string
+}) {
+  const [view, setView] = createSignal<"list" | "board">("list")
+
+  const groupedIssues = createMemo(() => {
+    const map = new Map<string, IssueRow[]>()
+    for (const issue of props.issues) {
+      const cat = issue.status_category ?? "backlog"
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(issue)
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (STATUS_DISPLAY_ORDER[a] ?? 99) - (STATUS_DISPLAY_ORDER[b] ?? 99))
+      .map(([category, items]) => ({
+        category,
+        label: statusLabel(category),
+        issues: items,
+      }))
+  })
+
+  const boardColumns = createMemo((): BoardColumn[] => {
+    const map = new Map<string, IssueRow[]>()
+    for (const category of Object.keys(BOARD_COLUMN_ORDER)) {
+      map.set(category, [])
+    }
+    for (const issue of props.issues) {
+      const cat = issue.status_category ?? "backlog"
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(issue)
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (BOARD_COLUMN_ORDER[a] ?? 99) - (BOARD_COLUMN_ORDER[b] ?? 99))
+      .map(([category, items]) => ({
+        id: category,
+        name: statusLabel(category),
+        category,
+        color: null,
+        issues: items,
+      }))
+  })
+
+  return (
+    <div class="flex h-full flex-col overflow-hidden">
+      {/* Header (page-specific) */}
+      {props.header}
+
+      {/* Tabs + controls row */}
+      <div class="flex shrink-0 items-center gap-2 border-border/50 border-b px-4 py-2">
+        <div class="flex items-center gap-1">
+          <For each={props.tabs}>
+            {(tab) => (
+              <a
+                href={tab.href ?? "#"}
+                onClick={
+                  tab.onClick
+                    ? (e: MouseEvent) => {
+                        e.preventDefault()
+                        tab.onClick!()
+                      }
+                    : undefined
+                }
+                class={`rounded-full px-3 py-1 text-[13px] transition-colors ${
+                  props.activeTab === tab.value
+                    ? "bg-foreground/10 font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </a>
+            )}
+          </For>
+        </div>
+
+        {props.extraTabControls}
+
+        <div class="flex-1" />
+
+        <div class="flex shrink-0 items-center gap-0.5">
+          <FilterPopover />
+          <DisplayPopover view={view()} onViewChange={setView} />
+          <ViewPopover />
+        </div>
+      </div>
+
+      {/* Content */}
+      <div class="flex-1 overflow-hidden">
+        <SolidSwitch>
+          <Match when={props.issues.length === 0}>
+            <div class="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <span class="text-[32px]">—</span>
+              <p class="text-[13px]">{props.emptyText}</p>
+              <button
+                type="button"
+                onClick={props.onNewIssue}
+                class="mt-2 rounded-full bg-primary px-5 py-2 font-medium text-[13px] text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Create new issue
+              </button>
+            </div>
+          </Match>
+
+          <Match when={view() === "list"}>
+            <div class="h-full overflow-y-auto">
+              <For each={groupedIssues()}>
+                {(group) => (
+                  <IssueGroup
+                    label={group.label}
+                    category={group.category}
+                    issues={group.issues}
+                    workspaceSlug={props.workspaceSlug}
+                  />
+                )}
+              </For>
+            </div>
+          </Match>
+
+          <Match when={view() === "board"}>
+            <BoardView columns={boardColumns()} workspaceSlug={props.workspaceSlug} />
+          </Match>
+        </SolidSwitch>
+      </div>
+    </div>
   )
 }

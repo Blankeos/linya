@@ -89,3 +89,10 @@ streams:
             )
           )
         )
+
+  favorite_data:
+    auto_subscribe: true
+    query: |
+      SELECT id, user_id, workspace_id, target_type, target_id, sort_order, created_at
+      FROM favorite
+      WHERE user_id = auth.user_id()
