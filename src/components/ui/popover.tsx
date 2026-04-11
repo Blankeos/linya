@@ -39,14 +39,21 @@ export const PopoverComp: Component<
   ComponentProps<typeof Popover> & {
     content?: JSX.Element
     contentProps?: ComponentProps<typeof PopoverContent>
+    triggerProps?: ComponentProps<typeof PopoverTrigger<"button">>
     children: JSX.Element
     arrow?: boolean
   }
 > = (props) => {
-  const [local, rest] = splitProps(props, ["children", "content", "contentProps", "arrow"])
+  const [local, rest] = splitProps(props, [
+    "children",
+    "content",
+    "contentProps",
+    "triggerProps",
+    "arrow",
+  ])
   return (
     <Popover {...rest}>
-      <PopoverTrigger>{local.children}</PopoverTrigger>
+      <PopoverTrigger {...local.triggerProps}>{local.children}</PopoverTrigger>
       <PopoverContent {...local.contentProps}>
         <Show when={local.arrow === true}>
           <PopoverPrimitive.Arrow />

@@ -5,12 +5,10 @@
 
 import type { JSX } from "solid-js"
 import {
-  createEffect,
   createMemo,
   createSignal,
   For,
   Match,
-  on,
   Show,
   Switch as SolidSwitch,
 } from "solid-js"
@@ -32,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { PopoverComp } from "@/components/ui/popover"
 import { SwitchCompact } from "@/components/ui/switch"
+import { usePowerSync } from "@/lib/powersync"
 import { cn } from "@/utils/cn"
 
 // ============================================================
@@ -47,6 +46,7 @@ export type IssueRow = {
   number: number
   sort_order: number
   status_id: string | null
+  team_id: string | null
   team_identifier: string
   status_name: string | null
   status_category: string | null
@@ -87,6 +87,7 @@ export const ISSUE_FIELDS = `
   i.number,
   i.sort_order,
   i.status_id,
+  i.team_id,
   t.identifier as team_identifier,
   ws.name as status_name,
   ws.category as status_category,
@@ -222,6 +223,42 @@ export function formatDateShort(iso: string | null): string | null {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+/**
+ * Compute a new sort_order for a drop, given the target group/column and the
+ * card it was dropped on (or null for "append to end"). Midpoints between
+ * neighbors so the reactive SQL re-query places the card at the right spot
+ * without needing an optimistic UI mirror. The source is excluded from
+ * neighbor lookup so dropping a card just below itself produces a sensible
+ * new order.
+ */
+export function computeSortOrder(
+  groups: BoardColumn[],
+  targetGroupId: string,
+  targetIssueId: string | null,
+  edge: "top" | "bottom" | null,
+  sourceIssueId: string
+): number {
+  const group = groups.find((g) => g.id === targetGroupId)
+  if (!group) return 0
+  const issues = group.issues.filter((i) => i.id !== sourceIssueId)
+
+  // Appending to an empty column, or to a column header drop.
+  if (issues.length === 0) return 0
+  if (targetIssueId === null) return issues[issues.length - 1].sort_order + 1
+
+  const tgtIdx = issues.findIndex((i) => i.id === targetIssueId)
+  if (tgtIdx === -1) return issues[issues.length - 1].sort_order + 1
+
+  const target = issues[tgtIdx]
+  if (edge === "bottom") {
+    const next = issues[tgtIdx + 1]
+    return next ? (target.sort_order + next.sort_order) / 2 : target.sort_order + 1
+  }
+  // "top" or null — insert above the target.
+  const prev = issues[tgtIdx - 1]
+  return prev ? (prev.sort_order + target.sort_order) / 2 : target.sort_order - 1
+}
+
 export function statusLabel(category: string): string {
   switch (category) {
     case "started":
@@ -314,7 +351,12 @@ function IssueGroupView(props: {
             <DraggableItem
               id={issue.id}
               type="list-item"
-              data={{ kind: "item", issueId: issue.id, groupId: props.group.id }}
+              data={{
+                kind: "item",
+                issueId: issue.id,
+                groupId: props.group.id,
+                teamId: issue.team_id,
+              }}
               dropTargetType="list-item"
               closestEdge
             >
@@ -356,59 +398,67 @@ export function ListView(props: {
   onNewIssue?: (category?: string) => void
 }) {
   const listScrollRef = useAutoScroll()
-
-  const [localGroups, setLocalGroups] = createSignal<BoardColumn[]>(
-    props.groups.map((g) => ({ ...g, issues: [...g.issues] }))
-  )
-
-  createEffect(
-    on(
-      () => props.groups,
-      (groups) => setLocalGroups(groups.map((g) => ({ ...g, issues: [...g.issues] })))
-    )
-  )
+  const { db } = usePowerSync()
 
   const visibleGroups = () =>
-    props.showEmptyGroups ? localGroups() : localGroups().filter((g) => g.issues.length > 0)
+    props.showEmptyGroups ? props.groups : props.groups.filter((g) => g.issues.length > 0)
 
-  function moveItem(
-    sourceIssueId: string,
-    sourceGroupId: string,
-    targetIssueId: string | null,
-    targetGroupId: string,
-    edge: "top" | "bottom" | null = null
-  ) {
-    if (sourceIssueId === targetIssueId) return
-    setLocalGroups((groups) => {
-      const next = groups.map((g) => ({ ...g, issues: [...g.issues] }))
-      const srcGroup = next.find((g) => g.id === sourceGroupId)
-      if (!srcGroup) return groups
-      const srcIdx = srcGroup.issues.findIndex((i) => i.id === sourceIssueId)
-      if (srcIdx === -1) return groups
-      const [issue] = srcGroup.issues.splice(srcIdx, 1)
-      const tgtGroup = next.find((g) => g.id === targetGroupId)
-      if (!tgtGroup) return groups
-      if (targetIssueId === null) {
-        tgtGroup.issues.push(issue)
-      } else {
-        const tgtIdx = tgtGroup.issues.findIndex((i) => i.id === targetIssueId)
-        const insertAt = tgtIdx === -1
-          ? tgtGroup.issues.length
-          : edge === "bottom" ? tgtIdx + 1 : tgtIdx
-        tgtGroup.issues.splice(insertAt, 0, issue)
-      }
-      return next
-    })
-  }
-
-  function handleDrop(event: OnDropEvent) {
-    const src = event.sourceData as { kind: string; issueId: string; groupId: string }
+  async function handleDrop(event: OnDropEvent) {
+    const src = event.sourceData as {
+      kind: string
+      issueId: string
+      groupId: string
+      teamId: string | null
+    }
     const tgt = event.targetData as { kind: string; issueId?: string; groupId: string }
     if (src.kind !== "item") return
-    if (tgt.kind === "item") {
-      moveItem(src.issueId, src.groupId, tgt.issueId!, tgt.groupId, event.closestEdge as "top" | "bottom" | null)
-    } else if (tgt.kind === "group") {
-      moveItem(src.issueId, src.groupId, null, tgt.groupId)
+
+    const targetGroupId =
+      tgt.kind === "item" || tgt.kind === "group" ? tgt.groupId : null
+    if (!targetGroupId) return
+    if (tgt.kind === "item" && tgt.issueId === src.issueId) return
+
+    const database = db()
+    if (!database) return
+
+    // Compute new sort_order from neighbors in the target group.
+    const newSortOrder = computeSortOrder(
+      props.groups,
+      targetGroupId,
+      tgt.kind === "item" ? (tgt.issueId ?? null) : null,
+      event.closestEdge as "top" | "bottom" | null,
+      src.issueId
+    )
+
+    const crossGroup = targetGroupId !== src.groupId
+    try {
+      if (crossGroup) {
+        if (!src.teamId) return
+        const row = await database.getOptional<{ id: string }>(
+          `SELECT id FROM workflow_status
+           WHERE team_id = ? AND category = ?
+           ORDER BY is_default DESC, position ASC
+           LIMIT 1`,
+          [src.teamId, targetGroupId]
+        )
+        if (!row?.id) {
+          console.warn(
+            `[ListView] No workflow_status row for team=${src.teamId} category=${targetGroupId}; drop ignored.`
+          )
+          return
+        }
+        await database.execute(
+          "UPDATE issue SET status_id = ?, sort_order = ? WHERE id = ?",
+          [row.id, newSortOrder, src.issueId]
+        )
+      } else {
+        await database.execute(
+          "UPDATE issue SET sort_order = ? WHERE id = ?",
+          [newSortOrder, src.issueId]
+        )
+      }
+    } catch (err) {
+      console.error("[ListView] Failed to persist drop:", err)
     }
   }
 
@@ -623,7 +673,12 @@ function BoardColumnView(props: {
                   <DraggableItem
                     id={issue.id}
                     type="card"
-                    data={{ kind: "card", issueId: issue.id, columnId: props.column.id }}
+                    data={{
+                      kind: "card",
+                      issueId: issue.id,
+                      columnId: props.column.id,
+                      teamId: issue.team_id,
+                    }}
                     dropTargetType="card"
                     closestEdge
                   >
@@ -675,67 +730,71 @@ export function BoardView(props: {
 }) {
   // Horizontal auto-scroll for the board container
   const boardScrollRef = useAutoScroll()
-
-  // Local mutable copy for optimistic DnD updates
-  const [localColumns, setLocalColumns] = createSignal<BoardColumn[]>(
-    props.columns.map((c) => ({ ...c, issues: [...c.issues] }))
-  )
-
-  // Keep in sync with external data (PowerSync)
-  createEffect(
-    on(
-      () => props.columns,
-      (cols) => setLocalColumns(cols.map((c) => ({ ...c, issues: [...c.issues] })))
-    )
-  )
+  const { db } = usePowerSync()
 
   const showEmpty = () => props.showEmptyColumns ?? true
   const visibleColumns = () =>
-    showEmpty() ? localColumns() : localColumns().filter((c) => c.issues.length > 0)
+    showEmpty() ? props.columns : props.columns.filter((c) => c.issues.length > 0)
   const hiddenColumns = () =>
-    showEmpty() ? [] : localColumns().filter((c) => c.issues.length === 0)
+    showEmpty() ? [] : props.columns.filter((c) => c.issues.length === 0)
 
-  function moveCard(
-    sourceIssueId: string,
-    sourceColumnId: string,
-    targetIssueId: string | null,
-    targetColumnId: string,
-    edge: "top" | "bottom" | null = null
-  ) {
-    if (sourceIssueId === targetIssueId) return
-    setLocalColumns((cols) => {
-      const next = cols.map((c) => ({ ...c, issues: [...c.issues] }))
-      const srcCol = next.find((c) => c.id === sourceColumnId)
-      if (!srcCol) return cols
-      const srcIdx = srcCol.issues.findIndex((i) => i.id === sourceIssueId)
-      if (srcIdx === -1) return cols
-      const [issue] = srcCol.issues.splice(srcIdx, 1)
-
-      const tgtCol = next.find((c) => c.id === targetColumnId)
-      if (!tgtCol) return cols
-
-      if (targetIssueId === null) {
-        tgtCol.issues.push(issue)
-      } else {
-        const tgtIdx = tgtCol.issues.findIndex((i) => i.id === targetIssueId)
-        const insertAt = tgtIdx === -1
-          ? tgtCol.issues.length
-          : edge === "bottom" ? tgtIdx + 1 : tgtIdx
-        tgtCol.issues.splice(insertAt, 0, issue)
-      }
-      return next
-    })
-  }
-
-  function handleDrop(event: OnDropEvent) {
-    const src = event.sourceData as { kind: string; issueId: string; columnId: string }
+  async function handleDrop(event: OnDropEvent) {
+    const src = event.sourceData as {
+      kind: string
+      issueId: string
+      columnId: string
+      teamId: string | null
+    }
     const tgt = event.targetData as { kind: string; issueId?: string; columnId: string }
     if (src.kind !== "card") return
 
-    if (tgt.kind === "card") {
-      moveCard(src.issueId, src.columnId, tgt.issueId!, tgt.columnId, event.closestEdge as "top" | "bottom" | null)
-    } else if (tgt.kind === "column" || tgt.kind === "hidden-column") {
-      moveCard(src.issueId, src.columnId, null, tgt.columnId)
+    const targetColumnId =
+      tgt.kind === "card" || tgt.kind === "column" || tgt.kind === "hidden-column"
+        ? tgt.columnId
+        : null
+    if (!targetColumnId) return
+    if (tgt.kind === "card" && tgt.issueId === src.issueId) return
+
+    const database = db()
+    if (!database) return
+
+    const newSortOrder = computeSortOrder(
+      props.columns,
+      targetColumnId,
+      tgt.kind === "card" ? (tgt.issueId ?? null) : null,
+      event.closestEdge as "top" | "bottom" | null,
+      src.issueId
+    )
+
+    const crossColumn = targetColumnId !== src.columnId
+    try {
+      if (crossColumn) {
+        if (!src.teamId) return
+        const row = await database.getOptional<{ id: string }>(
+          `SELECT id FROM workflow_status
+           WHERE team_id = ? AND category = ?
+           ORDER BY is_default DESC, position ASC
+           LIMIT 1`,
+          [src.teamId, targetColumnId]
+        )
+        if (!row?.id) {
+          console.warn(
+            `[BoardView] No workflow_status row for team=${src.teamId} category=${targetColumnId}; drop ignored.`
+          )
+          return
+        }
+        await database.execute(
+          "UPDATE issue SET status_id = ?, sort_order = ? WHERE id = ?",
+          [row.id, newSortOrder, src.issueId]
+        )
+      } else {
+        await database.execute(
+          "UPDATE issue SET sort_order = ? WHERE id = ?",
+          [newSortOrder, src.issueId]
+        )
+      }
+    } catch (err) {
+      console.error("[BoardView] Failed to persist drop:", err)
     }
   }
 
@@ -987,6 +1046,11 @@ export function FilterPopover() {
     <PopoverComp
       placement="bottom-end"
       contentProps={{ class: "p-0 w-[220px] border-border/60 bg-popover shadow-xl" }}
+      triggerProps={{
+        class:
+          "rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+        title: "Filter",
+      }}
       content={
         <div>
           <div class="flex items-center border-border/40 border-b px-3 py-2">
@@ -1040,13 +1104,7 @@ export function FilterPopover() {
         </div>
       }
     >
-      <button
-        type="button"
-        class="rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-        title="Filter"
-      >
-        <FilterIcon class="size-3.5" />
-      </button>
+      <FilterIcon class="size-3.5" />
     </PopoverComp>
   )
 }
@@ -1116,6 +1174,11 @@ export function DisplayPopover(props: {
     <PopoverComp
       placement="bottom-end"
       contentProps={{ class: "p-0 w-[296px] border-border/60 bg-popover shadow-xl" }}
+      triggerProps={{
+        class:
+          "rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+        title: "Display options",
+      }}
       content={
         <div>
           {/* Section 1: view toggle + layout options */}
@@ -1304,13 +1367,7 @@ export function DisplayPopover(props: {
         </div>
       }
     >
-      <button
-        type="button"
-        class="rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-        title="Display options"
-      >
-        <DisplayIcon class="size-3.5" />
-      </button>
+      <DisplayIcon class="size-3.5" />
     </PopoverComp>
   )
 }
@@ -1328,6 +1385,11 @@ export function ViewPopover() {
     <PopoverComp
       placement="bottom-end"
       contentProps={{ class: "p-0 w-[260px] border-border/60 bg-popover shadow-xl" }}
+      triggerProps={{
+        class:
+          "rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+        title: "View",
+      }}
       content={
         <div>
           <div class="flex items-center gap-1 border-border/30 border-b p-2">
@@ -1349,13 +1411,7 @@ export function ViewPopover() {
         </div>
       }
     >
-      <button
-        type="button"
-        class="rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-        title="View"
-      >
-        <LayoutIcon class="size-3.5" />
-      </button>
+      <LayoutIcon class="size-3.5" />
     </PopoverComp>
   )
 }

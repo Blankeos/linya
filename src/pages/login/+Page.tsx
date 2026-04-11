@@ -29,7 +29,7 @@ export default function LoginPage() {
     setPasskeyError("")
     try {
       await auth.passkeyLogin()
-      navigate(getRoute("/dashboard"))
+      navigate("/")
     } catch (err: any) {
       setPasskeyError(err?.message || "Passkey authentication failed.")
     } finally {

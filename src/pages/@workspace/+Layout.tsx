@@ -71,7 +71,7 @@ function TeamAccordionItem(props: {
   const teamBasePath = () => `/${props.workspaceSlug}/team/${props.team.identifier}`
 
   const subItemClass = (path: string) =>
-    `flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors w-full select-none ml-6 ${
+    `flex items-center gap-2 px-2 py-1 text-[13px] rounded cursor-pointer transition-colors flex-1 select-none ml-6 ${
       props.isActive(path)
         ? "bg-white/[0.08] text-foreground"
         : "text-muted-foreground hover:text-foreground hover:bg-white/5"

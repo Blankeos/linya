@@ -27,7 +27,7 @@ export default function SignupPage() {
     setError("")
     try {
       await auth.register(email(), password())
-      navigate(getRoute("/dashboard/onboarding"))
+      navigate(getRoute("/onboarding"))
     } catch (err: any) {
       setError(err?.message || "Could not create account.")
     } finally {

@@ -2,14 +2,17 @@ import { ApiError } from "@/server/lib/error"
 import { WorkspaceDAO } from "@/server/modules/workspace/workspace.dao"
 import { TeamsDAO } from "./teams.dao"
 
-// Default statuses matching Linear's defaults
-const DEFAULT_STATUSES = [
-  { name: "Backlog", color: "#95a5a6", category: "backlog", position: 0, isDefault: true },
-  { name: "Todo", color: "#3498db", category: "unstarted", position: 1, isDefault: false },
-  { name: "In Progress", color: "#f39c12", category: "started", position: 2, isDefault: false },
-  { name: "In Review", color: "#9b59b6", category: "started", position: 3, isDefault: false },
-  { name: "Done", color: "#2ecc71", category: "completed", position: 4, isDefault: false },
-  { name: "Cancelled", color: "#e74c3c", category: "cancelled", position: 5, isDefault: false },
+// Default statuses matching Linear's defaults. One row per board-column
+// category so drag-and-drop across every column can resolve a status_id.
+export const DEFAULT_STATUSES = [
+  { name: "Triage", color: "#f1c40f", category: "triage", position: 0, isDefault: false },
+  { name: "Backlog", color: "#95a5a6", category: "backlog", position: 1, isDefault: true },
+  { name: "Todo", color: "#3498db", category: "unstarted", position: 2, isDefault: false },
+  { name: "In Progress", color: "#f39c12", category: "started", position: 3, isDefault: false },
+  { name: "In Review", color: "#9b59b6", category: "in_review", position: 4, isDefault: false },
+  { name: "Done", color: "#2ecc71", category: "completed", position: 5, isDefault: false },
+  { name: "Cancelled", color: "#e74c3c", category: "cancelled", position: 6, isDefault: false },
+  { name: "Duplicate", color: "#7f8c8d", category: "duplicate", position: 7, isDefault: false },
 ]
 
 export class TeamsService {

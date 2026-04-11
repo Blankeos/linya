@@ -131,6 +131,29 @@ function getSyncStatus(connected: boolean, connecting: boolean, downloadError?: 
   return "disconnected"
 }
 
+// Marker in localStorage tracking which user the local PowerSync SQLite was
+// last populated for. If the current session's user id differs, we must wipe
+// the local cache before reconnecting — otherwise rows from the previous user
+// (or a now-deleted backend) linger in IndexedDB and surface as ghost data.
+const LAST_USER_KEY = "powersync.lastUserId"
+
+function getLastUserId(): string | null {
+  try {
+    return localStorage.getItem(LAST_USER_KEY)
+  } catch {
+    return null
+  }
+}
+
+function setLastUserId(id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(LAST_USER_KEY)
+    else localStorage.setItem(LAST_USER_KEY, id)
+  } catch {
+    // localStorage unavailable (SSR, private mode) — safe to ignore.
+  }
+}
+
 export const PowerSyncProvider: ParentComponent = (props) => {
   const auth = useAuthContext()
   const [db, setDb] = createSignal<PowerSyncDatabase | null>(null)
@@ -145,7 +168,9 @@ export const PowerSyncProvider: ParentComponent = (props) => {
     const currentUser = auth.user()
     const token = auth.accessToken()
 
-    // User logged out — tear down
+    // User logged out — tear down and clear local cache so the next
+    // login starts fresh (otherwise the previous user's rows persist in
+    // IndexedDB and PowerSync sync rules can't remove them).
     if (!currentUser || !token) {
       if (hasConnected) {
         statusListener?.()
@@ -153,10 +178,20 @@ export const PowerSyncProvider: ParentComponent = (props) => {
         setDb(null)
         setIsReady(false)
         setSyncStatus("disconnected")
-        resetPowerSyncDb()
-        resetBackendConnector()
         hasConnected = false
         connecting = false
+        ;(async () => {
+          try {
+            const database = await getPowerSyncDb()
+            await database.disconnectAndClear()
+          } catch (err) {
+            console.error("[PowerSync] Failed to clear on logout:", err)
+          } finally {
+            setLastUserId(null)
+            resetPowerSyncDb()
+            resetBackendConnector()
+          }
+        })()
       }
       return
     }
@@ -177,6 +212,18 @@ export const PowerSyncProvider: ParentComponent = (props) => {
         connector.updateAuth(currentUser.id, token)
 
         const database = await getPowerSyncDb()
+
+        // If the local SQLite was last populated for a different user,
+        // wipe it before connecting. Catches logouts that never ran the
+        // tear-down (killed tab, expired token, backend reset, etc).
+        const previousUserId = getLastUserId()
+        if (previousUserId && previousUserId !== currentUser.id) {
+          console.info(
+            `[PowerSync] User changed (${previousUserId} → ${currentUser.id}); clearing local cache.`
+          )
+          await database.disconnectAndClear()
+        }
+        setLastUserId(currentUser.id)
 
         statusListener = database.registerListener({
           statusChanged: (status) => {
