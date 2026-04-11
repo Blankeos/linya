@@ -12,6 +12,7 @@ import {
 } from "@/components/issues-shared"
 import { NewIssueModal } from "@/components/new-issue-modal"
 import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
+import { Tippy } from "@/lib/solid-tippy"
 import getTitle from "@/utils/get-title"
 
 type TeamRow = {
@@ -123,13 +124,15 @@ export default function TeamIssuesPage() {
         tabs={tabs()}
         activeTab={activeTab()}
         extraTabControls={
-          <button
-            type="button"
-            class="ml-1 rounded p-1 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-            title="New view"
-          >
-            <NewViewIcon class="size-3.5" />
-          </button>
+          <Tippy content="New view" props={{ placement: "bottom", delay: [500, 0] }}>
+            <button
+              type="button"
+              class="ml-1 rounded p-1 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              title="New view"
+            >
+              <NewViewIcon class="size-3.5" />
+            </button>
+          </Tippy>
         }
         issues={filteredIssues()}
         emptyText="No issues in this team"
