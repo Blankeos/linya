@@ -5,6 +5,58 @@ import { db } from "@/server/db/kysely"
 import { authMiddleware, requireAuthMiddleware } from "@/server/modules/auth/auth.middleware"
 import { ApiError } from "@/server/lib/error"
 
+// Ownership column for tables that have a direct user-ownership field
+const OWNERSHIP_COLUMN: Partial<Record<string, string>> = {
+  comment: "user_id",
+  reaction: "user_id",
+  document: "creator_id",
+  favorite: "user_id",
+}
+
+async function assertOwnership(dbTable: string, id: string, userId: string): Promise<void> {
+  const anyDb = db as any
+
+  if (dbTable === "issue") {
+    // Any workspace member may mutate issues — verify via team → workspace membership
+    const row = await db
+      .selectFrom("issue")
+      .innerJoin("team", "team.id", "issue.team_id")
+      .innerJoin("workspace_member", "workspace_member.workspace_id", "team.workspace_id")
+      .select("issue.id")
+      .where("issue.id", "=", id)
+      .where("workspace_member.user_id", "=", userId)
+      .executeTakeFirst()
+    if (!row) throw ApiError.Forbidden("Not authorized to modify this record")
+    return
+  }
+
+  if (dbTable === "issue_label") {
+    // Verify workspace membership via issue → team → workspace
+    const row = await db
+      .selectFrom("issue_label")
+      .innerJoin("issue", "issue.id", "issue_label.issue_id")
+      .innerJoin("team", "team.id", "issue.team_id")
+      .innerJoin("workspace_member", "workspace_member.workspace_id", "team.workspace_id")
+      .select("issue_label.id")
+      .where("issue_label.id", "=", id)
+      .where("workspace_member.user_id", "=", userId)
+      .executeTakeFirst()
+    if (!row) throw ApiError.Forbidden("Not authorized to modify this record")
+    return
+  }
+
+  const ownerCol = OWNERSHIP_COLUMN[dbTable]
+  if (!ownerCol) throw ApiError.Forbidden(`Mutations not supported for table: ${dbTable}`)
+
+  const row = await anyDb
+    .selectFrom(dbTable)
+    .select("id")
+    .where("id", "=", id)
+    .where(ownerCol, "=", userId)
+    .executeTakeFirst()
+  if (!row) throw ApiError.Forbidden("Not authorized to modify this record")
+}
+
 // PowerSync mutation operation shape
 const syncOperationSchema = z.object({
   op: z.enum(["PUT", "PATCH", "DELETE"]),
@@ -48,11 +100,9 @@ async function handleOperation(op: SyncOperation, userId: string): Promise<void>
 
       const data: Record<string, unknown> = { ...op.opData, id: op.id }
 
-      // Inject creator/author fields for tables that need it
-      if (dbTable === "issue" && !data["creator_id"]) data["creator_id"] = userId
-      if (dbTable === "comment" && !data["user_id"]) data["user_id"] = userId
-      if (dbTable === "reaction" && !data["user_id"]) data["user_id"] = userId
-      if (dbTable === "document" && !data["creator_id"]) data["creator_id"] = userId
+      // Always overwrite ownership fields — never trust client-provided values
+      if (dbTable === "issue" || dbTable === "document") data["creator_id"] = userId
+      if (dbTable === "comment" || dbTable === "reaction" || dbTable === "favorite") data["user_id"] = userId
 
       // Upsert: insert or replace on conflict by id
       await anyDb
@@ -66,7 +116,13 @@ async function handleOperation(op: SyncOperation, userId: string): Promise<void>
     case "PATCH": {
       if (!op.opData) throw ApiError.BadRequest("opData is required for PATCH operations")
 
+      await assertOwnership(dbTable, op.id, userId)
+
       const updates: Record<string, unknown> = { ...op.opData }
+
+      // Strip ownership fields — never let a client reassign authorship
+      delete updates["creator_id"]
+      delete updates["user_id"]
 
       // Add updated_at for tables that have it
       if (["issue", "comment", "document"].includes(dbTable)) {
@@ -82,6 +138,8 @@ async function handleOperation(op: SyncOperation, userId: string): Promise<void>
     }
 
     case "DELETE": {
+      await assertOwnership(dbTable, op.id, userId)
+
       await anyDb
         .deleteFrom(dbTable)
         .where("id", "=", op.id)
