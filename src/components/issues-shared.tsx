@@ -15,12 +15,13 @@ import {
   Switch as SolidSwitch,
 } from "solid-js"
 import { navigate } from "vike/client/router"
-import { IconMore } from "@/assets/icons"
+import { IconMore, IconPlus } from "@/assets/icons"
 import {
   DragAndDropProvider,
   DraggableItem,
   Droppable,
   type OnDropEvent,
+  useAutoScroll,
 } from "@/components/drag-and-drop"
 import { PriorityIcon, StatusIcon } from "@/components/issue-fields"
 import {
@@ -408,6 +409,108 @@ function HiddenColumnsPanel(props: { columns: BoardColumn[] }) {
 }
 
 // ============================================================
+// BoardColumnView — single kanban column with auto-scroll
+// ============================================================
+
+function BoardColumnView(props: {
+  column: BoardColumn
+  workspaceSlug: string
+  onNewIssue?: (category?: string) => void
+}) {
+  // Vertical auto-scroll for this column's card list
+  const columnScrollRef = useAutoScroll()
+
+  return (
+    <div class="flex w-[280px] shrink-0 flex-col rounded-lg bg-board-column">
+      {/* Column header */}
+      <div class="flex items-center gap-2 px-3 py-2">
+        <StatusIcon
+          category={props.column.category}
+          color={props.column.color}
+          class="size-3.5 shrink-0"
+        />
+        <span class="font-medium text-[13px] text-foreground">{props.column.name}</span>
+        <span class="text-[12px] text-muted-foreground/60">{props.column.issues.length}</span>
+        <div class="flex-1" />
+        <DropdownMenu>
+          <DropdownMenuTrigger class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground">
+            <IconMore class="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent class="w-44">
+            <DropdownMenuItem>Select all in column</DropdownMenuItem>
+            <DropdownMenuItem>Hide column</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <button
+          type="button"
+          onClick={() => props.onNewIssue?.(props.column.category)}
+          class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
+          title="Add new issue"
+        >
+          <IconPlus class="size-3.5" />
+        </button>
+      </div>
+
+      {/* Column body — drop zone + vertical auto-scroll */}
+      <Droppable
+        id={`col-${props.column.id}`}
+        type="card"
+        data={{ kind: "column", columnId: props.column.id }}
+      >
+        {(colState, colRef) => (
+          <div
+            ref={(el) => {
+              colRef(el)
+              columnScrollRef(el)
+            }}
+            class={cn(
+              "flex-1 overflow-y-auto px-2 pb-2 transition-colors",
+              colState() === "over" && props.column.issues.length === 0 && "bg-white/[0.03]"
+            )}
+          >
+            <div class="flex flex-col gap-2">
+              <For each={props.column.issues}>
+                {(issue) => (
+                  <DraggableItem
+                    id={issue.id}
+                    type="card"
+                    data={{ kind: "card", issueId: issue.id, columnId: props.column.id }}
+                    dropTargetType="card"
+                  >
+                    {(cardState, cardRef) => (
+                      <div
+                        ref={cardRef}
+                        class={cn(
+                          "flex flex-col",
+                          cardState() === "idle" && "cursor-grab",
+                          cardState() === "dragging" && "cursor-grabbing"
+                        )}
+                      >
+                        <Show when={cardState() === "over"}>
+                          <div class="mb-1.5 h-0.5 w-full rounded-full bg-primary/60" />
+                        </Show>
+                        <div
+                          class={cn(
+                            "transition-opacity",
+                            cardState() === "dragging" && "opacity-40"
+                          )}
+                        >
+                          <BoardCard issue={issue} workspaceSlug={props.workspaceSlug} />
+                        </div>
+                      </div>
+                    )}
+                  </DraggableItem>
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </Droppable>
+    </div>
+  )
+}
+
+// ============================================================
 // BoardView — kanban columns
 // ============================================================
 
@@ -417,12 +520,15 @@ export function BoardView(props: {
   showEmptyColumns?: boolean
   onNewIssue?: (category?: string) => void
 }) {
+  // Horizontal auto-scroll for the board container
+  const boardScrollRef = useAutoScroll()
+
   // Local mutable copy for optimistic DnD updates
   const [localColumns, setLocalColumns] = createSignal<BoardColumn[]>(
     props.columns.map((c) => ({ ...c, issues: [...c.issues] }))
   )
 
-  // Keep in sync with external data (PowerSync) when not mid-drag
+  // Keep in sync with external data (PowerSync)
   createEffect(
     on(
       () => props.columns,
@@ -478,93 +584,14 @@ export function BoardView(props: {
 
   return (
     <DragAndDropProvider instanceId="board" onDrop={handleDrop}>
-      <div class="flex h-full gap-4 overflow-x-auto p-4">
+      <div ref={boardScrollRef} class="flex h-full gap-4 overflow-x-auto p-4">
         <For each={visibleColumns()}>
           {(column) => (
-            <div class="flex w-[280px] shrink-0 flex-col rounded-lg bg-board-column">
-              {/* Column header */}
-              <div class="flex items-center gap-2 px-3 py-2">
-                <StatusIcon
-                  category={column.category}
-                  color={column.color}
-                  class="size-3.5 shrink-0"
-                />
-                <span class="font-medium text-[13px] text-foreground">{column.name}</span>
-                <span class="text-[12px] text-muted-foreground/60">{column.issues.length}</span>
-                <div class="flex-1" />
-                <DropdownMenu>
-                  <DropdownMenuTrigger class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground">
-                    <IconMore class="size-3.5" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent class="w-44">
-                    <DropdownMenuItem>Select all in column</DropdownMenuItem>
-                    <DropdownMenuItem>Hide column</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <button
-                  type="button"
-                  onClick={() => props.onNewIssue?.(column.category)}
-                  class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
-                  title="Add new issue"
-                >
-                  <PlusIcon class="size-3.5" />
-                </button>
-              </div>
-
-              {/* Column body — drop zone for the whole column */}
-              <Droppable
-                id={`col-${column.id}`}
-                type="card"
-                data={{ kind: "column", columnId: column.id }}
-              >
-                {(colState, colRef) => (
-                  <div
-                    ref={colRef}
-                    class={cn(
-                      "flex-1 overflow-y-auto px-2 pb-2 transition-colors",
-                      colState() === "over" && column.issues.length === 0 && "bg-white/[0.03]"
-                    )}
-                  >
-                    <div class="flex flex-col gap-2">
-                      <For each={column.issues}>
-                        {(issue) => (
-                          <DraggableItem
-                            id={issue.id}
-                            type="card"
-                            data={{ kind: "card", issueId: issue.id, columnId: column.id }}
-                            dropTargetType="card"
-                          >
-                            {(cardState, cardRef) => (
-                              <div
-                                ref={cardRef}
-                                class={cn(
-                                  "flex select-none flex-col",
-                                  cardState() === "idle" && "cursor-grab",
-                                  cardState() === "dragging" && "cursor-grabbing"
-                                )}
-                              >
-                                {/* Drop indicator line — shown when hovering over this card */}
-                                <Show when={cardState() === "over"}>
-                                  <div class="mb-1.5 h-0.5 w-full rounded-full bg-primary/60" />
-                                </Show>
-                                <div
-                                  class={cn(
-                                    "transition-opacity",
-                                    cardState() === "dragging" && "opacity-40"
-                                  )}
-                                >
-                                  <BoardCard issue={issue} workspaceSlug={props.workspaceSlug} />
-                                </div>
-                              </div>
-                            )}
-                          </DraggableItem>
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                )}
-              </Droppable>
-            </div>
+            <BoardColumnView
+              column={column}
+              workspaceSlug={props.workspaceSlug}
+              onNewIssue={props.onNewIssue}
+            />
           )}
         </For>
 

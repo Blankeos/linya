@@ -1,18 +1,18 @@
+import { useDisclosure } from "bagon-hooks"
 import { createMemo, createSignal, Show } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
-import { useDisclosure } from "bagon-hooks"
-import getTitle from "@/utils/get-title"
-import { usePowerSyncQuery, usePowerSyncGetOne } from "@/lib/powersync"
-import { NewIssueModal } from "@/components/new-issue-modal"
+import { IconPlus } from "@/assets/icons"
 import {
-  type IssueRow,
-  type IssuesPageTab,
   ISSUE_FIELDS,
+  type IssueRow,
   IssuesPage,
+  type IssuesPageTab,
   NewViewIcon,
-  PlusIcon,
 } from "@/components/issues-shared"
+import { NewIssueModal } from "@/components/new-issue-modal"
+import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
+import getTitle from "@/utils/get-title"
 
 type TeamRow = {
   id: string
@@ -63,7 +63,8 @@ export default function TeamIssuesPage() {
   )
 
   const [issues] = usePowerSyncQuery<IssueRow>(
-    () => `SELECT ${ISSUE_FIELDS} WHERE t.identifier = ? ORDER BY i.sort_order ASC, i.created_at DESC`,
+    () =>
+      `SELECT ${ISSUE_FIELDS} WHERE t.identifier = ? ORDER BY i.sort_order ASC, i.created_at DESC`,
     () => [teamIdentifier()]
   )
 
@@ -94,11 +95,11 @@ export default function TeamIssuesPage() {
     <>
       <IssuesPage
         header={
-          <div class="flex shrink-0 items-center gap-3 border-b border-border/50 px-4 py-2.5">
+          <div class="flex shrink-0 items-center gap-3 border-border/50 border-b px-4 py-2.5">
             <div class="flex flex-1 items-center gap-1.5 text-[13px]">
               <Show when={team()}>
                 <div
-                  class="flex size-4 shrink-0 items-center justify-center rounded text-[8px] font-bold text-white"
+                  class="flex size-4 shrink-0 items-center justify-center rounded font-bold text-[8px] text-white"
                   style={{ "background-color": team()!.color ?? "#6b7280" }}
                 >
                   {team()!.name[0]?.toUpperCase()}
@@ -114,7 +115,7 @@ export default function TeamIssuesPage() {
               onClick={() => openNewIssue()}
               class="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 text-[12px] text-primary-foreground transition-opacity hover:opacity-90"
             >
-              <PlusIcon class="size-3.5" />
+              <IconPlus class="size-3.5" />
               New Issue
             </button>
           </div>
