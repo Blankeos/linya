@@ -246,40 +246,178 @@ export function statusLabel(category: string): string {
 }
 
 // ============================================================
-// IssueGroup — collapsible status group header + rows
+// IssueGroupView — collapsible status group header + draggable rows
 // ============================================================
 
-export function IssueGroup(props: {
-  label: string
-  category: string
-  issues: IssueRow[]
+function IssueGroupView(props: {
+  group: BoardColumn
   workspaceSlug: string
+  onNewIssue?: (category?: string) => void
 }) {
   const [collapsed, setCollapsed] = createSignal(false)
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        class="sticky top-0 flex w-full items-center gap-2 border-border/20 border-b bg-background/50 px-4 py-2 transition-colors hover:bg-white/[0.02]"
+      <Droppable
+        id={`group-${props.group.id}`}
+        type="list-item"
+        data={{ kind: "group", groupId: props.group.id }}
       >
-        <StatusIcon category={props.category} class="size-3.5 shrink-0" />
-        <span class="font-medium text-[12px] text-muted-foreground">{props.label}</span>
-        <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/50">
-          {props.issues.length}
-        </span>
-        <ChevronRightIcon
-          class="ml-auto size-3 text-muted-foreground/50 transition-transform"
-          style={{ transform: collapsed() ? "rotate(0deg)" : "rotate(90deg)" }}
-        />
-      </button>
+        {(groupState, groupRef) => (
+          <div
+            ref={groupRef}
+            class={cn(
+              "group sticky top-0 flex w-full items-center gap-2 border-border/20 border-b bg-background/50 px-4 py-2 transition-colors",
+              groupState() === "over" ? "bg-primary/5" : "hover:bg-white/[0.02]"
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              class="flex shrink-0 items-center"
+            >
+              <ChevronRightIcon
+                class="size-3 text-muted-foreground/50 transition-transform"
+                style={{ transform: collapsed() ? "rotate(0deg)" : "rotate(90deg)" }}
+              />
+            </button>
+            <StatusIcon
+              category={props.group.category}
+              color={props.group.color}
+              class="size-3.5 shrink-0"
+            />
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              class="flex flex-1 items-center gap-2 text-left"
+            >
+              <span class="font-medium text-[12px] text-muted-foreground">{props.group.name}</span>
+              <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/50">
+                {props.group.issues.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onNewIssue?.(props.group.category)}
+              class="rounded p-1 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+              title={`New ${props.group.name} issue`}
+            >
+              <PlusIcon class="size-3.5" />
+            </button>
+          </div>
+        )}
+      </Droppable>
+
       <Show when={!collapsed()}>
-        <For each={props.issues}>
-          {(issue) => <IssueListRow issue={issue} workspaceSlug={props.workspaceSlug} />}
+        <For each={props.group.issues}>
+          {(issue) => (
+            <DraggableItem
+              id={issue.id}
+              type="list-item"
+              data={{ kind: "item", issueId: issue.id, groupId: props.group.id }}
+              dropTargetType="list-item"
+            >
+              {(itemState, itemRef) => (
+                <div
+                  ref={itemRef}
+                  class={cn(
+                    itemState() === "idle" && "cursor-grab",
+                    itemState() === "dragging" && "cursor-grabbing"
+                  )}
+                >
+                  <Show when={itemState() === "over"}>
+                    <div class="mx-4 h-0.5 rounded-full bg-primary/60" />
+                  </Show>
+                  <div class={cn("transition-opacity", itemState() === "dragging" && "opacity-40")}>
+                    <IssueListRow issue={issue} workspaceSlug={props.workspaceSlug} />
+                  </div>
+                </div>
+              )}
+            </DraggableItem>
+          )}
         </For>
       </Show>
     </div>
+  )
+}
+
+// ============================================================
+// ListView — grouped list view with drag-and-drop
+// ============================================================
+
+export function ListView(props: {
+  groups: BoardColumn[]
+  workspaceSlug: string
+  showEmptyGroups: boolean
+  onNewIssue?: (category?: string) => void
+}) {
+  const listScrollRef = useAutoScroll()
+
+  const [localGroups, setLocalGroups] = createSignal<BoardColumn[]>(
+    props.groups.map((g) => ({ ...g, issues: [...g.issues] }))
+  )
+
+  createEffect(
+    on(
+      () => props.groups,
+      (groups) => setLocalGroups(groups.map((g) => ({ ...g, issues: [...g.issues] })))
+    )
+  )
+
+  const visibleGroups = () =>
+    props.showEmptyGroups ? localGroups() : localGroups().filter((g) => g.issues.length > 0)
+
+  function moveItem(
+    sourceIssueId: string,
+    sourceGroupId: string,
+    targetIssueId: string | null,
+    targetGroupId: string
+  ) {
+    if (sourceIssueId === targetIssueId) return
+    setLocalGroups((groups) => {
+      const next = groups.map((g) => ({ ...g, issues: [...g.issues] }))
+      const srcGroup = next.find((g) => g.id === sourceGroupId)
+      if (!srcGroup) return groups
+      const srcIdx = srcGroup.issues.findIndex((i) => i.id === sourceIssueId)
+      if (srcIdx === -1) return groups
+      const [issue] = srcGroup.issues.splice(srcIdx, 1)
+      const tgtGroup = next.find((g) => g.id === targetGroupId)
+      if (!tgtGroup) return groups
+      if (targetIssueId === null) {
+        tgtGroup.issues.push(issue)
+      } else {
+        const tgtIdx = tgtGroup.issues.findIndex((i) => i.id === targetIssueId)
+        tgtGroup.issues.splice(tgtIdx === -1 ? tgtGroup.issues.length : tgtIdx, 0, issue)
+      }
+      return next
+    })
+  }
+
+  function handleDrop(event: OnDropEvent) {
+    const src = event.sourceData as { kind: string; issueId: string; groupId: string }
+    const tgt = event.targetData as { kind: string; issueId?: string; groupId: string }
+    if (src.kind !== "item") return
+    if (tgt.kind === "item") {
+      moveItem(src.issueId, src.groupId, tgt.issueId!, tgt.groupId)
+    } else if (tgt.kind === "group") {
+      moveItem(src.issueId, src.groupId, null, tgt.groupId)
+    }
+  }
+
+  return (
+    <DragAndDropProvider instanceId="list" onDrop={handleDrop}>
+      <div ref={listScrollRef} class="h-full overflow-y-auto">
+        <For each={visibleGroups()}>
+          {(group) => (
+            <IssueGroupView
+              group={group}
+              workspaceSlug={props.workspaceSlug}
+              onNewIssue={props.onNewIssue}
+            />
+          )}
+        </For>
+      </div>
+    </DragAndDropProvider>
   )
 }
 
@@ -294,9 +432,12 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
   const dueDate = () => formatDateShort(issue().due_date)
 
   return (
-    <a
-      href={`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`}
-      class="group flex cursor-pointer items-center gap-3 border-border/30 border-b px-4 py-1.5 hover:bg-white/[0.03]"
+    <button
+      type="button"
+      onClick={() => {
+        navigate(`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`)
+      }}
+      class="group flex w-full cursor-pointer items-center gap-3 border-border/30 border-b px-4 py-1.5 text-left hover:bg-white/[0.03]"
     >
       <PriorityIcon value={issue().priority} class="size-3.5 shrink-0" />
       <StatusIcon
@@ -304,15 +445,15 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
         color={issue().status_color}
         class="size-4 shrink-0"
       />
-      <span class="w-14 shrink-0 font-mono text-[12px] text-muted-foreground/60">
+      <span class="w-14 shrink-0 select-none font-mono text-[12px] text-muted-foreground/60">
         {identifier()}
       </span>
-      <span class="flex-1 truncate text-[13px] text-foreground">{issue().title}</span>
+      <span class="flex-1 select-none truncate text-[13px] text-foreground">{issue().title}</span>
       <Show when={labels().length > 0}>
         <div class="hidden shrink-0 items-center gap-1 sm:flex">
           <For each={labels()}>
             {(label) => (
-              <span class="rounded-full border border-border/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
+              <span class="select-none rounded-full border border-border/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
                 {label}
               </span>
             )}
@@ -320,7 +461,7 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
         </div>
       </Show>
       <Show when={dueDate()}>
-        <span class="hidden shrink-0 text-[11px] text-muted-foreground/60 md:block">
+        <span class="hidden select-none shrink-0 text-[11px] text-muted-foreground/60 md:block">
           {dueDate()}
         </span>
       </Show>
@@ -333,12 +474,12 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
         }
       >
         <div class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20">
-          <span class="font-medium text-[9px] text-primary">
+          <span class="select-none font-medium text-[9px] text-primary">
             {issue().assignee_name!.charAt(0).toUpperCase()}
           </span>
         </div>
       </Show>
-    </a>
+    </button>
   )
 }
 
@@ -934,11 +1075,12 @@ export function DisplayPopover(props: {
   onViewChange: (view: "list" | "board") => void
   showEmptyColumns: boolean
   onShowEmptyColumnsChange: (v: boolean) => void
+  showEmptyGroups: boolean
+  onShowEmptyGroupsChange: (v: boolean) => void
 }) {
   const [showSubIssues, setShowSubIssues] = createSignal(true)
   const [orderByRecency, setOrderByRecency] = createSignal(false)
   const [nestedSubIssues, setNestedSubIssues] = createSignal(false)
-  const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
   const [activeProps, setActiveProps] = createSignal<Set<DisplayProp>>(
     new Set(DEFAULT_ACTIVE_PROPS)
   )
@@ -1103,8 +1245,8 @@ export function DisplayPopover(props: {
               />
               <DisplaySwitch
                 label="Show empty groups"
-                checked={showEmptyGroups()}
-                onChange={setShowEmptyGroups}
+                checked={props.showEmptyGroups}
+                onChange={props.onShowEmptyGroupsChange}
               />
             </Show>
 
@@ -1365,9 +1507,13 @@ export function IssuesPage(props: {
 }) {
   const [view, setView] = createSignal<"list" | "board">("list")
   const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
+  const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
 
-  const groupedIssues = createMemo(() => {
+  const allListGroups = createMemo((): BoardColumn[] => {
     const map = new Map<string, IssueRow[]>()
+    for (const cat of Object.keys(STATUS_DISPLAY_ORDER)) {
+      map.set(cat, [])
+    }
     for (const issue of props.issues) {
       const cat = issue.status_category ?? "backlog"
       if (!map.has(cat)) map.set(cat, [])
@@ -1376,8 +1522,10 @@ export function IssuesPage(props: {
     return Array.from(map.entries())
       .sort(([a], [b]) => (STATUS_DISPLAY_ORDER[a] ?? 99) - (STATUS_DISPLAY_ORDER[b] ?? 99))
       .map(([category, items]) => ({
+        id: category,
+        name: statusLabel(category),
         category,
-        label: statusLabel(category),
+        color: null,
         issues: items,
       }))
   })
@@ -1446,6 +1594,8 @@ export function IssuesPage(props: {
             onViewChange={setView}
             showEmptyColumns={showEmptyColumns()}
             onShowEmptyColumnsChange={setShowEmptyColumns}
+            showEmptyGroups={showEmptyGroups()}
+            onShowEmptyGroupsChange={setShowEmptyGroups}
           />
           <ViewPopover />
         </div>
@@ -1469,18 +1619,12 @@ export function IssuesPage(props: {
           </Match>
 
           <Match when={view() === "list"}>
-            <div class="h-full overflow-y-auto">
-              <For each={groupedIssues()}>
-                {(group) => (
-                  <IssueGroup
-                    label={group.label}
-                    category={group.category}
-                    issues={group.issues}
-                    workspaceSlug={props.workspaceSlug}
-                  />
-                )}
-              </For>
-            </div>
+            <ListView
+              groups={allListGroups()}
+              workspaceSlug={props.workspaceSlug}
+              showEmptyGroups={showEmptyGroups()}
+              onNewIssue={props.onNewIssue}
+            />
           </Match>
 
           <Match when={view() === "board"}>
