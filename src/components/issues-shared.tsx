@@ -23,7 +23,7 @@ import {
   type OnDropEvent,
   useAutoScroll,
 } from "@/components/drag-and-drop"
-import { PriorityIcon, StatusIcon } from "@/components/issue-fields"
+import { StatusIcon } from "@/components/issue-fields"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -257,7 +257,7 @@ function IssueGroupView(props: {
   const [collapsed, setCollapsed] = createSignal(false)
 
   return (
-    <div>
+    <div class="mb-1">
       <Droppable
         id={`group-${props.group.id}`}
         type="list-item"
@@ -267,8 +267,8 @@ function IssueGroupView(props: {
           <div
             ref={groupRef}
             class={cn(
-              "group sticky top-0 flex w-full items-center gap-2 border-border/20 border-b bg-background/50 px-4 py-2 transition-colors",
-              groupState() === "over" ? "bg-primary/5" : "hover:bg-white/[0.02]"
+              "group sticky top-2 z-10 mx-3 mt-2 flex items-center gap-2 rounded-md bg-card px-3 py-2 transition-colors",
+              groupState() === "over" ? "bg-primary/10" : "hover:bg-card/80"
             )}
           >
             <button
@@ -292,7 +292,7 @@ function IssueGroupView(props: {
               class="flex flex-1 items-center gap-2 text-left"
             >
               <span class="font-medium text-[12px] text-muted-foreground">{props.group.name}</span>
-              <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/50">
+              <span class="text-[12px] text-muted-foreground/40">
                 {props.group.issues.length}
               </span>
             </button>
@@ -437,17 +437,17 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
       onClick={() => {
         navigate(`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`)
       }}
-      class="group flex w-full cursor-pointer items-center gap-3 border-border/30 border-b px-4 py-1.5 text-left hover:bg-white/[0.03]"
+      class="group flex w-full cursor-pointer items-center gap-3 border-border/10 border-b px-7 py-2.5 text-left hover:bg-white/[0.03]"
     >
-      <PriorityIcon value={issue().priority} class="size-3.5 shrink-0" />
+      <IconMore class="size-3.5 shrink-0 text-muted-foreground/20 opacity-0 transition-opacity group-hover:opacity-100" />
+      <span class="w-14 shrink-0 select-none font-mono text-[12px] text-muted-foreground/60">
+        {identifier()}
+      </span>
       <StatusIcon
         category={issue().status_category}
         color={issue().status_color}
         class="size-4 shrink-0"
       />
-      <span class="w-14 shrink-0 select-none font-mono text-[12px] text-muted-foreground/60">
-        {identifier()}
-      </span>
       <span class="flex-1 select-none truncate text-[13px] text-foreground">{issue().title}</span>
       <Show when={labels().length > 0}>
         <div class="hidden shrink-0 items-center gap-1 sm:flex">
