@@ -40,6 +40,7 @@ export function NewIssueModal(props: {
   open: boolean
   onClose: () => void
   workspaceSlug: string
+  initialCategory?: string
 }) {
   const [title, setTitle] = createSignal("")
   const [description, setDescription] = createSignal("")
@@ -69,6 +70,18 @@ export function NewIssueModal(props: {
   createEffect(() => {
     if (!props.open) return
     setTimeout(() => titleInputRef?.focus(), 50)
+  })
+
+  // When opened with an initialCategory, select the matching loaded status.
+  // Runs whenever the modal opens or statuses change, so it also works when
+  // statuses were already loaded from a previous open.
+  createEffect(() => {
+    if (!props.open) return
+    const category = props.initialCategory
+    if (!category) return
+    const list = statuses()
+    const match = list.find((s) => s.category === category)
+    if (match) setSelectedStatusId(match.id)
   })
 
   // Load workspace + teams when modal first opens
@@ -117,7 +130,9 @@ export function NewIssueModal(props: {
       const data = await res.json()
       const statusList: Status[] = (data as any).statuses ?? []
       setStatuses(statusList)
-      const defaultStatus = statusList.find((s) => s.category === "unstarted") ?? statusList[0]
+      const targetCategory = props.initialCategory ?? "unstarted"
+      const defaultStatus =
+        statusList.find((s) => s.category === targetCategory) ?? statusList[0]
       if (defaultStatus) setSelectedStatusId(defaultStatus.id)
     } catch {}
   }

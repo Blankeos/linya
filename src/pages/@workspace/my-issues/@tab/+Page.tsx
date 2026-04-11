@@ -28,6 +28,17 @@ export default function MyIssuesPage() {
   }
 
   const [newIssueOpen, setNewIssueOpen] = createSignal(false)
+  const [newIssueCategory, setNewIssueCategory] = createSignal<string | undefined>(undefined)
+
+  const openNewIssue = (category?: string) => {
+    setNewIssueCategory(category)
+    setNewIssueOpen(true)
+  }
+
+  const closeNewIssue = () => {
+    setNewIssueOpen(false)
+    setNewIssueCategory(undefined)
+  }
 
   const [assignedIssues] = usePowerSyncQuery<IssueRow>(
     () => `SELECT ${ISSUE_FIELDS} WHERE i.assignee_id = ? ORDER BY i.sort_order ASC, i.created_at DESC`,
@@ -84,14 +95,15 @@ export default function MyIssuesPage() {
         activeTab={tab()}
         issues={issues()}
         emptyText={emptyText()}
-        onNewIssue={() => setNewIssueOpen(true)}
+        onNewIssue={openNewIssue}
         workspaceSlug={workspaceSlug()}
       />
 
       <NewIssueModal
         open={newIssueOpen()}
-        onClose={() => setNewIssueOpen(false)}
+        onClose={closeNewIssue}
         workspaceSlug={workspaceSlug()}
+        initialCategory={newIssueCategory()}
       />
     </>
   )

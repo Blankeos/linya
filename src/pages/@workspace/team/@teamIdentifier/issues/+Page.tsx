@@ -39,7 +39,18 @@ export default function TeamIssuesPage() {
   const teamIdentifier = () => params().teamIdentifier ?? ""
 
   const [newIssueOpen, newIssueActions] = useDisclosure()
+  const [newIssueCategory, setNewIssueCategory] = createSignal<string | undefined>(undefined)
   const [activeTab, setActiveTab] = createSignal<ActiveTab>("all")
+
+  const openNewIssue = (category?: string) => {
+    setNewIssueCategory(category)
+    newIssueActions.open()
+  }
+
+  const closeNewIssue = () => {
+    newIssueActions.close()
+    setNewIssueCategory(undefined)
+  }
 
   const [team] = usePowerSyncGetOne<TeamRow>(
     () => `
@@ -100,7 +111,7 @@ export default function TeamIssuesPage() {
 
             <button
               type="button"
-              onClick={newIssueActions.open}
+              onClick={() => openNewIssue()}
               class="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 text-[12px] text-primary-foreground transition-opacity hover:opacity-90"
             >
               <PlusIcon class="size-3.5" />
@@ -121,14 +132,15 @@ export default function TeamIssuesPage() {
         }
         issues={filteredIssues()}
         emptyText="No issues in this team"
-        onNewIssue={newIssueActions.open}
+        onNewIssue={openNewIssue}
         workspaceSlug={workspaceSlug()}
       />
 
       <NewIssueModal
         open={newIssueOpen()}
-        onClose={newIssueActions.close}
+        onClose={closeNewIssue}
         workspaceSlug={workspaceSlug()}
+        initialCategory={newIssueCategory()}
       />
     </>
   )

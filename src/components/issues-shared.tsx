@@ -4,8 +4,31 @@
  */
 
 import type { JSX } from "solid-js"
-import { createMemo, createSignal, For, Match, Show, Switch as SolidSwitch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  on,
+  Show,
+  Switch as SolidSwitch,
+} from "solid-js"
+import { navigate } from "vike/client/router"
+import { IconMore } from "@/assets/icons"
+import {
+  DragAndDropProvider,
+  DraggableItem,
+  Droppable,
+  type OnDropEvent,
+} from "@/components/drag-and-drop"
 import { PriorityIcon, StatusIcon } from "@/components/issue-fields"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PopoverComp } from "@/components/ui/popover"
 import { SwitchCompact } from "@/components/ui/switch"
 import { cn } from "@/utils/cn"
@@ -19,6 +42,7 @@ export type IssueRow = {
   title: string
   priority: number
   due_date: string | null
+  created_at: string | null
   number: number
   sort_order: number
   status_id: string | null
@@ -58,6 +82,7 @@ export const ISSUE_FIELDS = `
   i.title,
   i.priority,
   i.due_date,
+  i.created_at,
   i.number,
   i.sort_order,
   i.status_id,
@@ -317,37 +342,238 @@ export function IssueListRow(props: { issue: IssueRow; workspaceSlug: string }) 
 }
 
 // ============================================================
+// HiddenColumnsPanel — collapsed empty columns list
+// ============================================================
+
+function HiddenColumnsPanel(props: { columns: BoardColumn[] }) {
+  const [collapsed, setCollapsed] = createSignal(false)
+
+  return (
+    <div class="flex w-[280px] shrink-0 flex-col">
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        class="flex items-center gap-2 px-3 py-2"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          class="size-3 shrink-0 text-muted-foreground/60 transition-transform"
+          style={{ transform: collapsed() ? "rotate(-90deg)" : "rotate(0deg)" }}
+          fill="currentColor"
+        >
+          <path
+            d="M4 6 L8 10 L12 6"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="font-medium text-[12px] text-muted-foreground">Hidden columns</span>
+      </button>
+      <Show when={!collapsed()}>
+        <div class="flex flex-col gap-1.5">
+          <For each={props.columns}>
+            {(column) => (
+              <Droppable
+                id={`hidden-col-${column.id}`}
+                type="card"
+                data={{ kind: "hidden-column", columnId: column.id }}
+              >
+                {(state, ref) => (
+                  <div
+                    ref={ref}
+                    class={cn(
+                      "flex items-center gap-2.5 rounded-lg border border-border/40 bg-card px-3 py-2.5 shadow-xs transition-colors",
+                      state() === "over" && "border-primary/60 bg-primary/5"
+                    )}
+                  >
+                    <StatusIcon
+                      category={column.category}
+                      color={column.color}
+                      class="size-3.5 shrink-0"
+                    />
+                    <span class="flex-1 text-[13px] text-foreground">{column.name}</span>
+                    <span class="text-[12px] text-muted-foreground/50">0</span>
+                  </div>
+                )}
+              </Droppable>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+// ============================================================
 // BoardView — kanban columns
 // ============================================================
 
-export function BoardView(props: { columns: BoardColumn[]; workspaceSlug: string }) {
+export function BoardView(props: {
+  columns: BoardColumn[]
+  workspaceSlug: string
+  showEmptyColumns?: boolean
+  onNewIssue?: (category?: string) => void
+}) {
+  // Local mutable copy for optimistic DnD updates
+  const [localColumns, setLocalColumns] = createSignal<BoardColumn[]>(
+    props.columns.map((c) => ({ ...c, issues: [...c.issues] }))
+  )
+
+  // Keep in sync with external data (PowerSync) when not mid-drag
+  createEffect(
+    on(
+      () => props.columns,
+      (cols) => setLocalColumns(cols.map((c) => ({ ...c, issues: [...c.issues] })))
+    )
+  )
+
+  const showEmpty = () => props.showEmptyColumns ?? true
+  const visibleColumns = () =>
+    showEmpty() ? localColumns() : localColumns().filter((c) => c.issues.length > 0)
+  const hiddenColumns = () =>
+    showEmpty() ? [] : localColumns().filter((c) => c.issues.length === 0)
+
+  function moveCard(
+    sourceIssueId: string,
+    sourceColumnId: string,
+    targetIssueId: string | null,
+    targetColumnId: string
+  ) {
+    if (sourceIssueId === targetIssueId) return
+    setLocalColumns((cols) => {
+      const next = cols.map((c) => ({ ...c, issues: [...c.issues] }))
+      const srcCol = next.find((c) => c.id === sourceColumnId)
+      if (!srcCol) return cols
+      const srcIdx = srcCol.issues.findIndex((i) => i.id === sourceIssueId)
+      if (srcIdx === -1) return cols
+      const [issue] = srcCol.issues.splice(srcIdx, 1)
+
+      const tgtCol = next.find((c) => c.id === targetColumnId)
+      if (!tgtCol) return cols
+
+      if (targetIssueId === null) {
+        tgtCol.issues.push(issue)
+      } else {
+        const tgtIdx = tgtCol.issues.findIndex((i) => i.id === targetIssueId)
+        tgtCol.issues.splice(tgtIdx === -1 ? tgtCol.issues.length : tgtIdx, 0, issue)
+      }
+      return next
+    })
+  }
+
+  function handleDrop(event: OnDropEvent) {
+    const src = event.sourceData as { kind: string; issueId: string; columnId: string }
+    const tgt = event.targetData as { kind: string; issueId?: string; columnId: string }
+    if (src.kind !== "card") return
+
+    if (tgt.kind === "card") {
+      moveCard(src.issueId, src.columnId, tgt.issueId!, tgt.columnId)
+    } else if (tgt.kind === "column" || tgt.kind === "hidden-column") {
+      moveCard(src.issueId, src.columnId, null, tgt.columnId)
+    }
+  }
+
   return (
-    <div class="flex h-full gap-4 overflow-x-auto p-4">
-      <For each={props.columns}>
-        {(column) => (
-          <div class="flex w-[280px] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30">
-            <div class="flex items-center gap-2 border-border/30 border-b px-3 py-2">
-              <StatusIcon
-                category={column.category}
-                color={column.color}
-                class="size-3.5 shrink-0"
-              />
-              <span class="flex-1 font-medium text-[12px] text-foreground">{column.name}</span>
-              <span class="rounded-full bg-secondary/50 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {column.issues.length}
-              </span>
-            </div>
-            <div class="flex-1 overflow-y-auto p-2">
-              <div class="flex flex-col gap-2">
-                <For each={column.issues}>
-                  {(issue) => <BoardCard issue={issue} workspaceSlug={props.workspaceSlug} />}
-                </For>
+    <DragAndDropProvider instanceId="board" onDrop={handleDrop}>
+      <div class="flex h-full gap-4 overflow-x-auto p-4">
+        <For each={visibleColumns()}>
+          {(column) => (
+            <div class="flex w-[280px] shrink-0 flex-col rounded-lg bg-board-column">
+              {/* Column header */}
+              <div class="flex items-center gap-2 px-3 py-2">
+                <StatusIcon
+                  category={column.category}
+                  color={column.color}
+                  class="size-3.5 shrink-0"
+                />
+                <span class="font-medium text-[13px] text-foreground">{column.name}</span>
+                <span class="text-[12px] text-muted-foreground/60">{column.issues.length}</span>
+                <div class="flex-1" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground">
+                    <IconMore class="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent class="w-44">
+                    <DropdownMenuItem>Select all in column</DropdownMenuItem>
+                    <DropdownMenuItem>Hide column</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  type="button"
+                  onClick={() => props.onNewIssue?.(column.category)}
+                  class="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
+                  title="Add new issue"
+                >
+                  <PlusIcon class="size-3.5" />
+                </button>
               </div>
+
+              {/* Column body — drop zone for the whole column */}
+              <Droppable
+                id={`col-${column.id}`}
+                type="card"
+                data={{ kind: "column", columnId: column.id }}
+              >
+                {(colState, colRef) => (
+                  <div
+                    ref={colRef}
+                    class={cn(
+                      "flex-1 overflow-y-auto px-2 pb-2 transition-colors",
+                      colState() === "over" && column.issues.length === 0 && "bg-white/[0.03]"
+                    )}
+                  >
+                    <div class="flex flex-col gap-2">
+                      <For each={column.issues}>
+                        {(issue) => (
+                          <DraggableItem
+                            id={issue.id}
+                            type="card"
+                            data={{ kind: "card", issueId: issue.id, columnId: column.id }}
+                            dropTargetType="card"
+                          >
+                            {(cardState, cardRef) => (
+                              <div
+                                ref={cardRef}
+                                class={cn(
+                                  "flex select-none flex-col",
+                                  cardState() === "idle" && "cursor-grab",
+                                  cardState() === "dragging" && "cursor-grabbing"
+                                )}
+                              >
+                                {/* Drop indicator line — shown when hovering over this card */}
+                                <Show when={cardState() === "over"}>
+                                  <div class="mb-1.5 h-0.5 w-full rounded-full bg-primary/60" />
+                                </Show>
+                                <div
+                                  class={cn(
+                                    "transition-opacity",
+                                    cardState() === "dragging" && "opacity-40"
+                                  )}
+                                >
+                                  <BoardCard issue={issue} workspaceSlug={props.workspaceSlug} />
+                                </div>
+                              </div>
+                            )}
+                          </DraggableItem>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                )}
+              </Droppable>
             </div>
-          </div>
-        )}
-      </For>
-    </div>
+          )}
+        </For>
+
+        {/* Hidden columns panel — only when showEmptyColumns is off */}
+        <Show when={hiddenColumns().length > 0}>
+          <HiddenColumnsPanel columns={hiddenColumns()} />
+        </Show>
+      </div>
+    </DragAndDropProvider>
   )
 }
 
@@ -359,49 +585,78 @@ export function BoardCard(props: { issue: IssueRow; workspaceSlug: string }) {
   const issue = () => props.issue
   const identifier = () => `${issue().team_identifier}-${issue().number}`
   const labels = () => (issue().labels ? issue().labels!.split(",").filter(Boolean) : [])
+  const createdLabel = () => {
+    const iso = issue().created_at
+    if (!iso) return null
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return null
+    return `Created ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+  }
 
   return (
-    <a
-      href={`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`}
-      class="flex flex-col gap-2 rounded-md border border-border/40 bg-background p-3 shadow-sm transition-all hover:border-border/60 hover:shadow"
+    <button
+      type="button"
+      class="flex w-full select-none flex-col gap-2.5 rounded-md border border-border/40 bg-card p-3 text-start shadow-xs transition-colors hover:border-border/70"
+      onClick={() => {
+        navigate(`/${props.workspaceSlug}/issue/${identifier()}/${slugify(issue().title)}`)
+      }}
     >
+      {/* Row 1: identifier + assignee (top-right) */}
       <div class="flex items-start gap-2">
-        <PriorityIcon value={issue().priority} class="mt-0.5 size-3.5 shrink-0" />
-        <span class="flex-1 text-[13px] text-foreground leading-snug">{issue().title}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="font-mono text-[11px] text-muted-foreground/60">{identifier()}</span>
-        <div class="flex-1" />
-        <Show when={labels().length > 0}>
-          <div class="flex items-center gap-1">
-            <For each={labels().slice(0, 2)}>
-              {(label) => (
-                <span class="rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
-                  {label}
-                </span>
-              )}
-            </For>
-            <Show when={labels().length > 2}>
-              <span class="text-[10px] text-muted-foreground/50">+{labels().length - 2}</span>
-            </Show>
-          </div>
-        </Show>
+        <span class="flex-1 select-none font-mono text-[11px] text-muted-foreground/60">
+          {identifier()}
+        </span>
         <Show
           when={issue().assignee_name}
           fallback={
-            <div class="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/30">
-              <IconPersonSmall class="size-3 text-muted-foreground/30" />
+            <div class="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/60 border-dashed">
+              <IconPersonSmall class="size-3 text-muted-foreground/40" />
             </div>
           }
         >
           <div class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20">
-            <span class="font-medium text-[9px] text-primary">
+            <span class="select-none font-medium text-[9px] text-primary">
               {issue().assignee_name!.charAt(0).toUpperCase()}
             </span>
           </div>
         </Show>
       </div>
-    </a>
+
+      {/* Row 2: status icon + title */}
+      <div class="flex items-start gap-2">
+        <StatusIcon
+          category={issue().status_category}
+          color={issue().status_color}
+          class="mt-0.5 size-3.5 shrink-0"
+        />
+        <span class="flex-1 select-none text-[13px] text-foreground leading-snug">
+          {issue().title}
+        </span>
+      </div>
+
+      {/* Optional labels row */}
+      <Show when={labels().length > 0}>
+        <div class="flex flex-wrap items-center gap-1">
+          <For each={labels().slice(0, 3)}>
+            {(label) => (
+              <span class="rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+                {label}
+              </span>
+            )}
+          </For>
+          <Show when={labels().length > 3}>
+            <span class="select-none text-[10px] text-muted-foreground/50">
+              +{labels().length - 3}
+            </span>
+          </Show>
+        </div>
+      </Show>
+
+      {/* Footer: Created date */}
+      <Show when={createdLabel()}>
+        <span class="select-none text-[11px] text-muted-foreground/50">{createdLabel()}</span>
+      </Show>
+    </button>
   )
 }
 
@@ -650,10 +905,11 @@ function DisplaySwitch(props: { label: string; checked: boolean; onChange: (v: b
 export function DisplayPopover(props: {
   view: "list" | "board"
   onViewChange: (view: "list" | "board") => void
+  showEmptyColumns: boolean
+  onShowEmptyColumnsChange: (v: boolean) => void
 }) {
   const [showSubIssues, setShowSubIssues] = createSignal(true)
   const [orderByRecency, setOrderByRecency] = createSignal(false)
-  const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
   const [nestedSubIssues, setNestedSubIssues] = createSignal(false)
   const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
   const [activeProps, setActiveProps] = createSignal<Set<DisplayProp>>(
@@ -806,8 +1062,8 @@ export function DisplayPopover(props: {
                   <p class="font-semibold text-[13px] text-foreground">Board options</p>
                   <DisplaySwitch
                     label="Show empty columns"
-                    checked={showEmptyColumns()}
-                    onChange={setShowEmptyColumns}
+                    checked={props.showEmptyColumns}
+                    onChange={props.onShowEmptyColumnsChange}
                   />
                 </>
               }
@@ -1077,10 +1333,11 @@ export function IssuesPage(props: {
   extraTabControls?: JSX.Element
   issues: IssueRow[]
   emptyText: string
-  onNewIssue: () => void
+  onNewIssue: (category?: string) => void
   workspaceSlug: string
 }) {
   const [view, setView] = createSignal<"list" | "board">("list")
+  const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
 
   const groupedIssues = createMemo(() => {
     const map = new Map<string, IssueRow[]>()
@@ -1157,7 +1414,12 @@ export function IssuesPage(props: {
 
         <div class="flex shrink-0 items-center gap-0.5">
           <FilterPopover />
-          <DisplayPopover view={view()} onViewChange={setView} />
+          <DisplayPopover
+            view={view()}
+            onViewChange={setView}
+            showEmptyColumns={showEmptyColumns()}
+            onShowEmptyColumnsChange={setShowEmptyColumns}
+          />
           <ViewPopover />
         </div>
       </div>
@@ -1171,7 +1433,7 @@ export function IssuesPage(props: {
               <p class="text-[13px]">{props.emptyText}</p>
               <button
                 type="button"
-                onClick={props.onNewIssue}
+                onClick={() => props.onNewIssue()}
                 class="mt-2 rounded-full bg-primary px-5 py-2 font-medium text-[13px] text-primary-foreground transition-opacity hover:opacity-90"
               >
                 Create new issue
@@ -1195,7 +1457,12 @@ export function IssuesPage(props: {
           </Match>
 
           <Match when={view() === "board"}>
-            <BoardView columns={boardColumns()} workspaceSlug={props.workspaceSlug} />
+            <BoardView
+              columns={boardColumns()}
+              workspaceSlug={props.workspaceSlug}
+              showEmptyColumns={showEmptyColumns()}
+              onNewIssue={props.onNewIssue}
+            />
           </Match>
         </SolidSwitch>
       </div>
