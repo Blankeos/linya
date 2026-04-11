@@ -97,6 +97,11 @@ import {
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter"
 import {
+  type Edge,
+  attachClosestEdge,
+  extractClosestEdge,
+} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge"
+import {
   type Accessor,
   createContext,
   createEffect,
@@ -107,6 +112,8 @@ import {
   onCleanup,
   useContext,
 } from "solid-js"
+
+export type { Edge }
 
 /* ---------- 1. Context ---------- */
 
@@ -121,6 +128,8 @@ export type OnDropEvent = {
   sourceInstanceId: string | null
   /** Mostly no point, it's the same anyway as instanceId anyway. Just for debugging. */
   targetInstanceId: string | null
+  /** The closest edge of the drop target at the time of drop ('top' | 'bottom' | 'left' | 'right' | null). */
+  closestEdge: Edge | null
 }
 
 export type OnDropHandler = (event: OnDropEvent) => void
@@ -189,6 +198,7 @@ export const DragAndDropProvider = (props: FlowProps<DragAndDropProviderProps>) 
             targetData: targetEntry?.data,
             sourceInstanceId: (source.data as { instanceId: string }).instanceId,
             targetInstanceId: instanceId(),
+            closestEdge: extractClosestEdge(target.data),
           })
         },
         onDrop: ({ source, location }) => {
@@ -210,6 +220,7 @@ export const DragAndDropProvider = (props: FlowProps<DragAndDropProviderProps>) 
             targetData: targetEntry?.data,
             sourceInstanceId: (source.data as { instanceId: string }).instanceId,
             targetInstanceId: instanceId(),
+            closestEdge: extractClosestEdge(target.data),
           })
         },
       })
@@ -245,9 +256,16 @@ export const DraggableItem = (props: {
   dropTargetCanDrop?: (sourceData: any) => boolean
   /** @defaultValue true */
   enableDropTarget?: boolean
-  children: (state: Accessor<DragState>, ref: (el: HTMLElement) => void) => JSX.Element
+  /** When true, uses attachClosestEdge so the render prop receives a live `edge` signal. */
+  closestEdge?: boolean
+  children: (
+    state: Accessor<DragState>,
+    ref: (el: HTMLElement) => void,
+    edge: Accessor<Edge | null>
+  ) => JSX.Element
 }) => {
   const [state, setState] = createSignal<DragState>("idle")
+  const [edge, setEdge] = createSignal<Edge | null>(null)
   let ref!: HTMLElement
   const { instanceId, registry } = useDragAndDropContext()
 
@@ -276,7 +294,13 @@ export const DraggableItem = (props: {
           ? [
               dropTargetForElements({
                 element: ref,
-                getData: () => ({ id: props.id }),
+                getData: ({ input, element }) => {
+                  const base = { id: props.id }
+                  if (props.closestEdge) {
+                    return attachClosestEdge(base, { input, element, allowedEdges: ["top", "bottom"] })
+                  }
+                  return base
+                },
                 getIsSticky: () => true,
                 canDrop: ({ source }) => {
                   const s = source.data as {
@@ -295,9 +319,21 @@ export const DraggableItem = (props: {
                   if (props.dropTargetCanDrop) return props.dropTargetCanDrop(s.data)
                   return true
                 },
-                onDragEnter: () => setState("over"),
-                onDragLeave: () => setState("idle"),
-                onDrop: () => setState("idle"),
+                onDragEnter: ({ self }) => {
+                  setState("over")
+                  if (props.closestEdge) setEdge(extractClosestEdge(self.data))
+                },
+                onDrag: ({ self }) => {
+                  if (props.closestEdge) setEdge(extractClosestEdge(self.data))
+                },
+                onDragLeave: () => {
+                  setState("idle")
+                  setEdge(null)
+                },
+                onDrop: () => {
+                  setState("idle")
+                  setEdge(null)
+                },
               }),
             ]
           : [])
@@ -307,7 +343,7 @@ export const DraggableItem = (props: {
 
   // eslint-disable-next-line solid/reactivity
   // biome-ignore lint/suspicious/noAssignInExpressions: ref setting w/ solid
-  return props.children(state, (el) => (ref = el))
+  return props.children(state, (el) => (ref = el), edge)
 }
 
 /** Droppable is only `dropTargetForElements()`, useful for areas where an item can be dragged into. */

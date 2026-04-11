@@ -316,8 +316,9 @@ function IssueGroupView(props: {
               type="list-item"
               data={{ kind: "item", issueId: issue.id, groupId: props.group.id }}
               dropTargetType="list-item"
+              closestEdge
             >
-              {(itemState, itemRef) => (
+              {(itemState, itemRef, edge) => (
                 <div
                   ref={itemRef}
                   class={cn(
@@ -325,12 +326,15 @@ function IssueGroupView(props: {
                     itemState() === "dragging" && "cursor-grabbing"
                   )}
                 >
-                  <Show when={itemState() === "over"}>
+                  <Show when={itemState() === "over" && edge() === "top"}>
                     <div class="mx-4 h-0.5 rounded-full bg-primary/60" />
                   </Show>
                   <div class={cn("transition-opacity", itemState() === "dragging" && "opacity-40")}>
                     <IssueListRow issue={issue} workspaceSlug={props.workspaceSlug} />
                   </div>
+                  <Show when={itemState() === "over" && edge() === "bottom"}>
+                    <div class="mx-4 h-0.5 rounded-full bg-primary/60" />
+                  </Show>
                 </div>
               )}
             </DraggableItem>
@@ -371,7 +375,8 @@ export function ListView(props: {
     sourceIssueId: string,
     sourceGroupId: string,
     targetIssueId: string | null,
-    targetGroupId: string
+    targetGroupId: string,
+    edge: "top" | "bottom" | null = null
   ) {
     if (sourceIssueId === targetIssueId) return
     setLocalGroups((groups) => {
@@ -387,7 +392,10 @@ export function ListView(props: {
         tgtGroup.issues.push(issue)
       } else {
         const tgtIdx = tgtGroup.issues.findIndex((i) => i.id === targetIssueId)
-        tgtGroup.issues.splice(tgtIdx === -1 ? tgtGroup.issues.length : tgtIdx, 0, issue)
+        const insertAt = tgtIdx === -1
+          ? tgtGroup.issues.length
+          : edge === "bottom" ? tgtIdx + 1 : tgtIdx
+        tgtGroup.issues.splice(insertAt, 0, issue)
       }
       return next
     })
@@ -398,7 +406,7 @@ export function ListView(props: {
     const tgt = event.targetData as { kind: string; issueId?: string; groupId: string }
     if (src.kind !== "item") return
     if (tgt.kind === "item") {
-      moveItem(src.issueId, src.groupId, tgt.issueId!, tgt.groupId)
+      moveItem(src.issueId, src.groupId, tgt.issueId!, tgt.groupId, event.closestEdge as "top" | "bottom" | null)
     } else if (tgt.kind === "group") {
       moveItem(src.issueId, src.groupId, null, tgt.groupId)
     }
@@ -617,8 +625,9 @@ function BoardColumnView(props: {
                     type="card"
                     data={{ kind: "card", issueId: issue.id, columnId: props.column.id }}
                     dropTargetType="card"
+                    closestEdge
                   >
-                    {(cardState, cardRef) => (
+                    {(cardState, cardRef, edge) => (
                       <div
                         ref={cardRef}
                         class={cn(
@@ -627,7 +636,7 @@ function BoardColumnView(props: {
                           cardState() === "dragging" && "cursor-grabbing"
                         )}
                       >
-                        <Show when={cardState() === "over"}>
+                        <Show when={cardState() === "over" && edge() === "top"}>
                           <div class="mb-1.5 h-0.5 w-full rounded-full bg-primary/60" />
                         </Show>
                         <div
@@ -638,6 +647,9 @@ function BoardColumnView(props: {
                         >
                           <BoardCard issue={issue} workspaceSlug={props.workspaceSlug} />
                         </div>
+                        <Show when={cardState() === "over" && edge() === "bottom"}>
+                          <div class="mt-1.5 h-0.5 w-full rounded-full bg-primary/60" />
+                        </Show>
                       </div>
                     )}
                   </DraggableItem>
@@ -687,7 +699,8 @@ export function BoardView(props: {
     sourceIssueId: string,
     sourceColumnId: string,
     targetIssueId: string | null,
-    targetColumnId: string
+    targetColumnId: string,
+    edge: "top" | "bottom" | null = null
   ) {
     if (sourceIssueId === targetIssueId) return
     setLocalColumns((cols) => {
@@ -705,7 +718,10 @@ export function BoardView(props: {
         tgtCol.issues.push(issue)
       } else {
         const tgtIdx = tgtCol.issues.findIndex((i) => i.id === targetIssueId)
-        tgtCol.issues.splice(tgtIdx === -1 ? tgtCol.issues.length : tgtIdx, 0, issue)
+        const insertAt = tgtIdx === -1
+          ? tgtCol.issues.length
+          : edge === "bottom" ? tgtIdx + 1 : tgtIdx
+        tgtCol.issues.splice(insertAt, 0, issue)
       }
       return next
     })
@@ -717,7 +733,7 @@ export function BoardView(props: {
     if (src.kind !== "card") return
 
     if (tgt.kind === "card") {
-      moveCard(src.issueId, src.columnId, tgt.issueId!, tgt.columnId)
+      moveCard(src.issueId, src.columnId, tgt.issueId!, tgt.columnId, event.closestEdge as "top" | "bottom" | null)
     } else if (tgt.kind === "column" || tgt.kind === "hidden-column") {
       moveCard(src.issueId, src.columnId, null, tgt.columnId)
     }

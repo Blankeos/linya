@@ -3,3 +3,5 @@ Your references are:
 - \_tmp_solid-launch - references for a good production-ready app with auth, etc. With this exact tech stack. If there are things you can just copy. try to cop it.
 - \_tmp_solid-powersync-example - references for exactly how to use powersync with this exact tech stack.
 - I also added a bunch of .html files in \_\_docs that contain exact snapshots of the linear app on some of our apps. Maybe it can help you understand the exact layout and designs a lot better.
+
+We're using bun, never `npm install`
