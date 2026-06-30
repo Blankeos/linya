@@ -2,7 +2,8 @@ import { createMemo, createSignal } from "solid-js"
 import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import { useAuthContext } from "@/context/auth.context"
-import { usePowerSyncQuery } from "@/lib/powersync"
+import { usePowerSyncQuery, usePowerSyncGetOne } from "@/lib/powersync"
+import { useDisplaySettings } from "@/hooks/use-display-settings"
 import getTitle from "@/utils/get-title"
 import { NewIssueModal } from "@/components/new-issue-modal"
 import {
@@ -26,6 +27,17 @@ export default function MyIssuesPage() {
     const t = params().tab as Tab
     return VALID_TABS.includes(t) ? t : "assigned"
   }
+
+  const [workspace] = usePowerSyncGetOne<{ id: string }>(
+    () => `SELECT w.id FROM workspace w WHERE w.slug = ?`,
+    () => [workspaceSlug()]
+  )
+
+  const displaySettings = useDisplaySettings(
+    () => workspace()?.id ?? null,
+    () => "my_issues",
+    () => null
+  )
 
   const [newIssueOpen, setNewIssueOpen] = createSignal(false)
   const [newIssueCategory, setNewIssueCategory] = createSignal<string | undefined>(undefined)
@@ -97,6 +109,7 @@ export default function MyIssuesPage() {
         emptyText={emptyText()}
         onNewIssue={openNewIssue}
         workspaceSlug={workspaceSlug()}
+        displaySettings={displaySettings}
       />
 
       <NewIssueModal

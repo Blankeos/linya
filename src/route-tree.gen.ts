@@ -32,6 +32,7 @@ const pageRoutes = [
   "/@workspace/team/@teamIdentifier/issues/@issueId",
   "/@workspace/team/@teamIdentifier/projects/all",
   "/@workspace/team/@teamIdentifier/views/issues",
+  "/@workspace/team/@teamIdentifier/views/issues/new",
   "/@workspace/teams",
   "/@workspace/view/@viewSlug",
   "/@workspace/views/issues",

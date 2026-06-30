@@ -37,6 +37,7 @@ export class BackendConnector implements PowerSyncBackendConnector {
             await this.uploadIssue(entry)
             break
           case "favorite":
+          case "display_setting":
             await this.uploadViaGenericSync(entry)
             break
           default:

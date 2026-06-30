@@ -2,10 +2,8 @@ import {
   createContext,
   createEffect,
   createSignal,
-  For,
   onCleanup,
   onMount,
-  Show,
   useContext,
   type JSX,
 } from "solid-js"
@@ -13,7 +11,11 @@ import { useMetadata } from "vike-metadata-solid"
 import { usePageContext } from "vike-solid/usePageContext"
 import { navigate } from "vike/client/router"
 import { honoClient } from "@/lib/hono-client"
+import { usePowerSyncGetOne } from "@/lib/powersync"
 import { PillTabs } from "@/components/pill-tabs"
+import { FilterPopover, DisplayPopover, DEFAULT_ACTIVE_PROPS } from "@/components/issues-shared"
+import type { DisplayProp } from "@/components/issues-shared"
+import { SaveToDropdown, type SaveTarget } from "@/components/views-shared"
 import getTitle from "@/utils/get-title"
 
 // Shared state context
@@ -30,6 +32,9 @@ type NewViewContextType = {
   saveView: () => Promise<void>
   workspaceSlug: () => string
   viewType: () => ViewType
+  displayView: () => "list" | "board"
+  showEmptyColumns: () => boolean
+  showEmptyGroups: () => boolean
 }
 
 const NewViewContext = createContext<NewViewContextType>()
@@ -57,7 +62,26 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
   const [viewName, setViewName] = createSignal("")
   const [viewDescription, setViewDescription] = createSignal("")
   const [isCreating, setIsCreating] = createSignal(false)
-  const [workspaceId, setWorkspaceId] = createSignal<string | null>(null)
+  const [saveTarget, setSaveTarget] = createSignal<SaveTarget>({ kind: "personal" })
+
+  // Display popover local state (for the new view, not persisted yet)
+  const [view, setView] = createSignal<"list" | "board">("list")
+  const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
+  const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
+  const [showSubIssues, setShowSubIssues] = createSignal(true)
+  const [orderByRecency, setOrderByRecency] = createSignal(false)
+  const [nestedSubIssues, setNestedSubIssues] = createSignal(false)
+  const [activeProps, setActiveProps] = createSignal<Set<DisplayProp>>(
+    new Set(DEFAULT_ACTIVE_PROPS)
+  )
+
+  // Load workspace info from PowerSync
+  const [workspace] = usePowerSyncGetOne<{ id: string }>(
+    () => `SELECT w.id FROM workspace w WHERE w.slug = ?`,
+    () => [workspaceSlug()]
+  )
+
+  const workspaceId = () => workspace()?.id ?? null
 
   // Esc key: blur focused input on first press, navigate back on second press
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -73,25 +97,11 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
   onMount(() => document.addEventListener("keydown", handleKeyDown))
   onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
 
-  // Load workspace ID
-  createEffect(() => {
-    if (workspaceId()) return
-    const load = async () => {
-      try {
-        const client = honoClient()
-        const res = await client.workspaces.$get()
-        if (!res.ok) return
-        const data = await res.json()
-        const ws = (data as any).workspaces?.find((w: any) => w.slug === workspaceSlug())
-        if (ws) setWorkspaceId(ws.id)
-      } catch {}
-    }
-    load()
-  })
-
   const saveView = async () => {
     if (!viewName().trim() || !workspaceId()) return
     const type = viewType()
+    const target = saveTarget()
+
     try {
       setIsCreating(true)
       const client = honoClient()
@@ -102,7 +112,17 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
           description: viewDescription() || undefined,
           type: type === "issues" ? "issue" : "project",
           filters: {},
-          isShared: false,
+          displayOptions: {
+            view: view(),
+            showEmptyColumns: showEmptyColumns(),
+            showEmptyGroups: showEmptyGroups(),
+            showSubIssues: showSubIssues(),
+            orderByRecency: orderByRecency(),
+            nestedSubIssues: nestedSubIssues(),
+            activeProps: Array.from(activeProps()),
+          },
+          isShared: target.kind !== "personal",
+          teamId: target.kind === "team" ? target.teamId : undefined,
         },
       })
       if (!res.ok) return
@@ -131,6 +151,9 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
     saveView,
     workspaceSlug,
     viewType,
+    displayView: view,
+    showEmptyColumns,
+    showEmptyGroups,
   }
 
   return (
@@ -202,13 +225,11 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
               {/* Actions */}
               <div class="flex shrink-0 items-center gap-2">
                 <span class="text-[13px] text-muted-foreground">Save to</span>
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-white/5"
-                >
-                  <LockIcon class="size-3 text-muted-foreground" />
-                  Personal
-                </button>
+                <SaveToDropdown
+                  value={saveTarget()}
+                  onChange={setSaveTarget}
+                  workspaceSlug={workspaceSlug()}
+                />
                 <button
                   type="button"
                   onClick={() => navigate(backLink())}
@@ -252,19 +273,31 @@ export default function NewViewLayout(props: NewViewLayoutProps) {
                 containerClass="flex items-center gap-1"
               />
             </div>
-            <div class="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-              >
-                <FilterIcon class="size-3.5" />
-              </button>
-              <button
-                type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-              >
-                <DisplayIcon class="size-3.5" />
-              </button>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <FilterPopover />
+              <DisplayPopover
+                view={view()}
+                onViewChange={setView}
+                showEmptyColumns={showEmptyColumns()}
+                onShowEmptyColumnsChange={setShowEmptyColumns}
+                showEmptyGroups={showEmptyGroups()}
+                onShowEmptyGroupsChange={setShowEmptyGroups}
+                showSubIssues={showSubIssues()}
+                onShowSubIssuesChange={setShowSubIssues}
+                orderByRecency={orderByRecency()}
+                onOrderByRecencyChange={setOrderByRecency}
+                nestedSubIssues={nestedSubIssues()}
+                onNestedSubIssuesChange={setNestedSubIssues}
+                activeProps={activeProps()}
+                onToggleProp={(prop) => {
+                  setActiveProps((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(prop)) next.delete(prop)
+                    else next.add(prop)
+                    return next
+                  })
+                }}
+              />
             </div>
           </div>
         </div>
@@ -295,60 +328,6 @@ function LayersIcon(props: { class?: string }) {
       <polygon points="12 2 2 7 12 12 22 7 12 2" />
       <polyline points="2 17 12 22 22 17" />
       <polyline points="2 12 12 17 22 12" />
-    </svg>
-  )
-}
-
-function LockIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-
-function FilterIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  )
-}
-
-function DisplayIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <line x1="4" y1="6" x2="20" y2="6" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-      <line x1="12" y1="18" x2="12" y2="18" stroke-width="3" stroke-linecap="round" />
     </svg>
   )
 }

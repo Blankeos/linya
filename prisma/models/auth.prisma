@@ -52,6 +52,7 @@ model User {
   favorites     Favorite[]
   sidebar_items SidebarItem[]
   api_keys      ApiKey[]
+  display_settings DisplaySetting[] @relation("DisplaySettingUser")
 
   @@map("user")
 }

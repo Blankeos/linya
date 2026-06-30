@@ -98,3 +98,31 @@ streams:
       SELECT id, user_id, workspace_id, target_type, target_id, sort_order, created_at
       FROM favorite
       WHERE user_id = auth.user_id()
+
+  custom_view_data:
+    auto_subscribe: true
+    query: |
+      SELECT id, workspace_id, team_id, creator_id, name, description, icon,
+             type, filters, display_options, sort_order, is_shared, created_at, updated_at
+      FROM custom_view
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+      )
+
+  display_setting_data:
+    auto_subscribe: true
+    queries:
+      - SELECT id, workspace_id, user_id, context_type, context_id,
+               settings, created_at, updated_at
+        FROM display_setting
+        WHERE user_id = auth.user_id()
+          AND workspace_id IN (
+            SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+          )
+      - SELECT id, workspace_id, user_id, context_type, context_id,
+               settings, created_at, updated_at
+        FROM display_setting
+        WHERE user_id IS NULL
+          AND workspace_id IN (
+            SELECT workspace_id FROM workspace_member WHERE user_id = auth.user_id()
+          )

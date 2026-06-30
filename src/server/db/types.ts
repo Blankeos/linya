@@ -82,6 +82,16 @@ export type Cycle = {
     created_at: Generated<Timestamp>;
     updated_at: Generated<Timestamp>;
 };
+export type DisplaySetting = {
+    id: string;
+    workspace_id: string;
+    user_id: string | null;
+    context_type: string;
+    context_id: string | null;
+    settings: Generated<unknown>;
+    created_at: Generated<Timestamp>;
+    updated_at: Generated<Timestamp>;
+};
 export type Document = {
     id: string;
     workspace_id: string;
@@ -399,6 +409,7 @@ export type DB = {
     customer: Customer;
     customer_request: CustomerRequest;
     cycle: Cycle;
+    display_setting: DisplaySetting;
     document: Document;
     favorite: Favorite;
     github_issue_link: GithubIssueLink;

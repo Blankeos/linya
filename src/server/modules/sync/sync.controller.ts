@@ -11,6 +11,7 @@ const OWNERSHIP_COLUMN: Partial<Record<string, string>> = {
   reaction: "user_id",
   document: "creator_id",
   favorite: "user_id",
+  display_setting: "user_id",
 }
 
 async function assertOwnership(dbTable: string, id: string, userId: string): Promise<void> {
@@ -45,6 +46,32 @@ async function assertOwnership(dbTable: string, id: string, userId: string): Pro
     return
   }
 
+  if (dbTable === "display_setting") {
+    // User can modify their own display settings, or workspace defaults if they are admin/owner
+    const row = await db
+      .selectFrom("display_setting")
+      .select(["display_setting.id", "display_setting.user_id", "display_setting.workspace_id"])
+      .where("display_setting.id", "=", id)
+      .executeTakeFirst()
+    if (!row) throw ApiError.Forbidden("Not authorized to modify this record")
+    if (row.user_id && row.user_id !== userId) {
+      throw ApiError.Forbidden("Not authorized to modify this record")
+    }
+    if (!row.user_id) {
+      // Workspace default — require admin/owner role
+      const member = await db
+        .selectFrom("workspace_member")
+        .select("role")
+        .where("workspace_id", "=", row.workspace_id)
+        .where("user_id", "=", userId)
+        .executeTakeFirst()
+      if (!member || !["owner", "admin"].includes(member.role)) {
+        throw ApiError.Forbidden("Only admins can set workspace display defaults")
+      }
+    }
+    return
+  }
+
   const ownerCol = OWNERSHIP_COLUMN[dbTable]
   if (!ownerCol) throw ApiError.Forbidden(`Mutations not supported for table: ${dbTable}`)
 
@@ -75,6 +102,7 @@ const ALLOWED_TABLES = new Set([
   "reactions",
   "documents",
   "favorite",
+  "display_setting",
 ])
 
 // Map plural table names (PowerSync convention) to DB table names
@@ -85,6 +113,7 @@ const TABLE_MAP: Record<string, string> = {
   reactions: "reaction",
   documents: "document",
   favorite: "favorite",
+  display_setting: "display_setting",
 }
 
 async function handleOperation(op: SyncOperation, userId: string): Promise<void> {
@@ -103,6 +132,9 @@ async function handleOperation(op: SyncOperation, userId: string): Promise<void>
       // Always overwrite ownership fields — never trust client-provided values
       if (dbTable === "issue" || dbTable === "document") data["creator_id"] = userId
       if (dbTable === "comment" || dbTable === "reaction" || dbTable === "favorite") data["user_id"] = userId
+      // display_setting: user_id=NULL means workspace default (set-for-everyone);
+      // only force ownership on personal rows, preserve NULL for workspace defaults
+      if (dbTable === "display_setting" && data["user_id"] != null) data["user_id"] = userId
 
       // Upsert: insert or replace on conflict by id
       await anyDb

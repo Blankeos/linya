@@ -22,6 +22,7 @@ model Workspace {
   integrations  Integration[]
   api_keys      ApiKey[]
   webhooks      Webhook[]
+  display_settings DisplaySetting[]
 
   @@map("workspace")
 }

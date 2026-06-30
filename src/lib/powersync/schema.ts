@@ -138,6 +138,11 @@ export const AppSchema = new Schema({
     description: column.text, template_data: column.text,
     created_at: column.text, updated_at: column.text,
   }),
+  display_setting: new Table({
+    workspace_id: column.text, user_id: column.text,
+    context_type: column.text, context_id: column.text,
+    settings: column.text, created_at: column.text, updated_at: column.text,
+  }),
 })
 
 export type Database = (typeof AppSchema)["types"]

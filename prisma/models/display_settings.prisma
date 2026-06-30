@@ -1,0 +1,16 @@
+model DisplaySetting {
+  id           String   @id @default(cuid())
+  workspace_id String
+  user_id      String?  // null = workspace default for everyone
+  context_type String   // 'team_issues', 'my_issues', 'workspace_issues'
+  context_id   String?  // e.g. team_id, null for global
+  settings     Json     @default("{}")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user      User?     @relation("DisplaySettingUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, user_id, context_type, context_id])
+  @@map("display_setting")
+}

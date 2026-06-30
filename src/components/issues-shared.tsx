@@ -1151,23 +1151,19 @@ export function DisplayPopover(props: {
   onShowEmptyColumnsChange: (v: boolean) => void
   showEmptyGroups: boolean
   onShowEmptyGroupsChange: (v: boolean) => void
+  showSubIssues: boolean
+  onShowSubIssuesChange: (v: boolean) => void
+  orderByRecency: boolean
+  onOrderByRecencyChange: (v: boolean) => void
+  nestedSubIssues: boolean
+  onNestedSubIssuesChange: (v: boolean) => void
+  activeProps: Set<DisplayProp>
+  onToggleProp: (prop: DisplayProp) => void
+  hasDiverged?: boolean
+  onReset?: () => void
+  onSetDefaultForEveryone?: () => void
+  setDefaultLabel?: string
 }) {
-  const [showSubIssues, setShowSubIssues] = createSignal(true)
-  const [orderByRecency, setOrderByRecency] = createSignal(false)
-  const [nestedSubIssues, setNestedSubIssues] = createSignal(false)
-  const [activeProps, setActiveProps] = createSignal<Set<DisplayProp>>(
-    new Set(DEFAULT_ACTIVE_PROPS)
-  )
-
-  const toggleProp = (prop: DisplayProp) => {
-    setActiveProps((prev) => {
-      const next = new Set(prev)
-      if (next.has(prop)) next.delete(prop)
-      else next.add(prop)
-      return next
-    })
-  }
-
   const isList = () => props.view === "list"
 
   return (
@@ -1176,7 +1172,7 @@ export function DisplayPopover(props: {
       contentProps={{ class: "p-0 w-[296px] border-border/60 bg-popover shadow-xl" }}
       triggerProps={{
         class:
-          "rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+          "relative rounded p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
         title: "Display options",
       }}
       content={
@@ -1279,8 +1275,8 @@ export function DisplayPopover(props: {
 
             <DisplaySwitch
               label="Order completed by recency"
-              checked={orderByRecency()}
-              onChange={setOrderByRecency}
+              checked={props.orderByRecency}
+              onChange={props.onOrderByRecencyChange}
             />
           </div>
 
@@ -1294,8 +1290,8 @@ export function DisplayPopover(props: {
             </div>
             <DisplaySwitch
               label="Show sub-issues"
-              checked={showSubIssues()}
-              onChange={setShowSubIssues}
+              checked={props.showSubIssues}
+              onChange={props.onShowSubIssuesChange}
             />
           </div>
 
@@ -1319,8 +1315,8 @@ export function DisplayPopover(props: {
               <p class="font-semibold text-[13px] text-foreground">List options</p>
               <DisplaySwitch
                 label="Nested sub-issues"
-                checked={nestedSubIssues()}
-                onChange={setNestedSubIssues}
+                checked={props.nestedSubIssues}
+                onChange={props.onNestedSubIssuesChange}
               />
               <DisplaySwitch
                 label="Show empty groups"
@@ -1336,8 +1332,8 @@ export function DisplayPopover(props: {
                   {(prop) => (
                     <button
                       type="button"
-                      onClick={() => toggleProp(prop)}
-                      class={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${activeProps().has(prop) ? "border-foreground/30 bg-foreground/10 font-medium text-foreground" : "border-border/30 text-muted-foreground/50 hover:border-border/50 hover:text-muted-foreground"}`}
+                      onClick={() => props.onToggleProp(prop)}
+                      class={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${props.activeProps.has(prop) ? "border-foreground/30 bg-foreground/10 font-medium text-foreground" : "border-border/30 text-muted-foreground/50 hover:border-border/50 hover:text-muted-foreground"}`}
                     >
                       {prop}
                     </button>
@@ -1347,27 +1343,35 @@ export function DisplayPopover(props: {
             </div>
           </div>
 
-          <div class="h-px bg-border/30" />
-
-          {/* Footer */}
-          <div class="flex items-center justify-between px-3 py-2">
-            <button
-              type="button"
-              class="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              class="text-[13px] text-primary transition-colors hover:text-primary/80"
-            >
-              Set default for everyone
-            </button>
-          </div>
+          {/* Footer — only visible when diverged */}
+          <Show when={props.hasDiverged}>
+            <div class="h-px bg-border/30" />
+            <div class="flex items-center justify-between px-3 py-2">
+              <button
+                type="button"
+                onClick={() => props.onReset?.()}
+                class="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => props.onSetDefaultForEveryone?.()}
+                class="text-[13px] text-primary transition-colors hover:text-primary/80"
+              >
+                {props.setDefaultLabel ?? "Set default for everyone"}
+              </button>
+            </div>
+          </Show>
         </div>
       }
     >
-      <DisplayIcon class="size-3.5" />
+      <span class="relative">
+        <DisplayIcon class="size-3.5" />
+        <Show when={props.hasDiverged}>
+          <span class="absolute -top-1 -right-1 size-1.5 rounded-full bg-primary" />
+        </Show>
+      </span>
     </PopoverComp>
   )
 }
@@ -1567,6 +1571,17 @@ export type IssuesPageTab = {
   onClick?: () => void
 }
 
+export type DisplaySettingsHandle = {
+  settings: () => import("@/hooks/use-display-settings").DisplaySettingsValue
+  hasDiverged: () => boolean
+  updateSetting: <K extends keyof import("@/hooks/use-display-settings").DisplaySettingsValue>(
+    key: K,
+    value: import("@/hooks/use-display-settings").DisplaySettingsValue[K]
+  ) => void
+  resetToDefault: () => void
+  setDefaultForEveryone: () => void
+}
+
 export function IssuesPage(props: {
   header: JSX.Element
   tabs: IssuesPageTab[]
@@ -1576,10 +1591,18 @@ export function IssuesPage(props: {
   emptyText: string
   onNewIssue: (category?: string) => void
   workspaceSlug: string
+  displaySettings?: DisplaySettingsHandle
+  setDefaultLabel?: string
 }) {
-  const [view, setView] = createSignal<"list" | "board">("list")
-  const [showEmptyColumns, setShowEmptyColumns] = createSignal(true)
-  const [showEmptyGroups, setShowEmptyGroups] = createSignal(false)
+  // Fallback to local-only state when no display settings hook is provided
+  const view = () => props.displaySettings?.settings().view ?? "list"
+  const showEmptyColumns = () => props.displaySettings?.settings().showEmptyColumns ?? true
+  const showEmptyGroups = () => props.displaySettings?.settings().showEmptyGroups ?? false
+  const showSubIssues = () => props.displaySettings?.settings().showSubIssues ?? true
+  const orderByRecency = () => props.displaySettings?.settings().orderByRecency ?? false
+  const nestedSubIssues = () => props.displaySettings?.settings().nestedSubIssues ?? false
+  const activePropsArr = () => props.displaySettings?.settings().activeProps ?? Array.from(DEFAULT_ACTIVE_PROPS)
+  const activePropsSet = createMemo(() => new Set(activePropsArr() as DisplayProp[]))
 
   const allListGroups = createMemo((): BoardColumn[] => {
     const map = new Map<string, IssueRow[]>()
@@ -1663,11 +1686,28 @@ export function IssuesPage(props: {
           <FilterPopover />
           <DisplayPopover
             view={view()}
-            onViewChange={setView}
+            onViewChange={(v) => props.displaySettings?.updateSetting("view", v)}
             showEmptyColumns={showEmptyColumns()}
-            onShowEmptyColumnsChange={setShowEmptyColumns}
+            onShowEmptyColumnsChange={(v) => props.displaySettings?.updateSetting("showEmptyColumns", v)}
             showEmptyGroups={showEmptyGroups()}
-            onShowEmptyGroupsChange={setShowEmptyGroups}
+            onShowEmptyGroupsChange={(v) => props.displaySettings?.updateSetting("showEmptyGroups", v)}
+            showSubIssues={showSubIssues()}
+            onShowSubIssuesChange={(v) => props.displaySettings?.updateSetting("showSubIssues", v)}
+            orderByRecency={orderByRecency()}
+            onOrderByRecencyChange={(v) => props.displaySettings?.updateSetting("orderByRecency", v)}
+            nestedSubIssues={nestedSubIssues()}
+            onNestedSubIssuesChange={(v) => props.displaySettings?.updateSetting("nestedSubIssues", v)}
+            activeProps={activePropsSet()}
+            onToggleProp={(prop) => {
+              const current = new Set(activePropsArr() as DisplayProp[])
+              if (current.has(prop)) current.delete(prop)
+              else current.add(prop)
+              props.displaySettings?.updateSetting("activeProps", Array.from(current))
+            }}
+            hasDiverged={props.displaySettings?.hasDiverged() ?? false}
+            onReset={() => props.displaySettings?.resetToDefault()}
+            onSetDefaultForEveryone={() => props.displaySettings?.setDefaultForEveryone()}
+            setDefaultLabel={props.setDefaultLabel}
           />
           <ViewPopover />
         </div>

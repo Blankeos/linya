@@ -44,7 +44,7 @@ export default function ViewsProjectsPage() {
   )
 
   return (
-    <div class="flex h-full flex-col overflow-hidden bg-card">
+    <div class="flex h-full flex-col overflow-hidden bg-background">
       {/* Header */}
       <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border/50 shrink-0">
         <h1 class="text-[14px] font-semibold text-foreground tracking-[-0.01em]">Views</h1>

@@ -12,6 +12,7 @@ import {
 } from "@/components/issues-shared"
 import { NewIssueModal } from "@/components/new-issue-modal"
 import { usePowerSyncGetOne, usePowerSyncQuery } from "@/lib/powersync"
+import { useDisplaySettings } from "@/hooks/use-display-settings"
 import { Tippy } from "@/lib/solid-tippy"
 import getTitle from "@/utils/get-title"
 
@@ -53,14 +54,27 @@ export default function TeamIssuesPage() {
     setNewIssueCategory(undefined)
   }
 
-  const [team] = usePowerSyncGetOne<TeamRow>(
+  const [team] = usePowerSyncGetOne<TeamRow & { workspace_id: string }>(
     () => `
-      SELECT t.id, t.name, t.identifier, t.color
+      SELECT t.id, t.name, t.identifier, t.color, t.workspace_id
       FROM team t
       JOIN workspace w ON t.workspace_id = w.id
       WHERE w.slug = ? AND t.identifier = ?
     `,
     () => [workspaceSlug(), teamIdentifier()]
+  )
+
+  // Query workspace ID directly from slug — available instantly from local SQLite
+  // (avoids waiting for the team query to resolve, preventing flash of default settings)
+  const [workspace] = usePowerSyncGetOne<{ id: string }>(
+    () => `SELECT w.id FROM workspace w WHERE w.slug = ?`,
+    () => [workspaceSlug()]
+  )
+
+  const displaySettings = useDisplaySettings(
+    () => workspace()?.id ?? null,
+    () => "team_issues",
+    () => team()?.id ?? null
   )
 
   const [issues] = usePowerSyncQuery<IssueRow>(
@@ -138,6 +152,7 @@ export default function TeamIssuesPage() {
         emptyText="No issues in this team"
         onNewIssue={openNewIssue}
         workspaceSlug={workspaceSlug()}
+        displaySettings={displaySettings}
       />
 
       <NewIssueModal

@@ -1,38 +1,25 @@
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, For, Match, Show, Switch as SolidSwitch } from "solid-js"
 import { usePageContext } from "vike-solid/usePageContext"
 import { usePowerSyncQuery } from "@/lib/powersync"
 import { useNewView } from "../+Layout"
 import {
-  StatusIcon,
-  PriorityIcon,
   ProjectStatusIcon,
   type ProjectStatus,
 } from "@/components/issue-fields"
+import {
+  type IssueRow as SharedIssueRow,
+  type BoardColumn,
+  ISSUE_FIELDS,
+  STATUS_DISPLAY_ORDER,
+  BOARD_COLUMN_ORDER,
+  statusLabel,
+  ListView,
+  BoardView,
+} from "@/components/issues-shared"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type IssueRow = {
-  id: string
-  title: string
-  priority: number
-  due_date: string | null
-  number: number
-  team_identifier: string
-  status_id: string | null
-  status_name: string | null
-  status_category: string | null
-  status_color: string | null
-}
-
-type StatusGroup = {
-  id: string
-  name: string
-  category: string
-  color: string
-  issues: IssueRow[]
-}
 
 type ProjectRow = {
   id: string
@@ -47,44 +34,9 @@ type ProjectRow = {
   created_at: string
 }
 
-type Priority = "urgent" | "high" | "medium" | "low" | "none"
-type StatusCategory = "backlog" | "unstarted" | "started" | "completed" | "cancelled"
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function mapPriority(p: number): Priority {
-  switch (p) {
-    case 1:
-      return "urgent"
-    case 2:
-      return "high"
-    case 3:
-      return "medium"
-    case 4:
-      return "low"
-    default:
-      return "none"
-  }
-}
-
-function mapStatusCategory(category: string | null): StatusCategory {
-  switch (category) {
-    case "backlog":
-      return "backlog"
-    case "unstarted":
-      return "unstarted"
-    case "started":
-      return "started"
-    case "completed":
-      return "completed"
-    case "cancelled":
-      return "cancelled"
-    default:
-      return "backlog"
-  }
-}
 
 function mapProjectStatus(status: string | null): ProjectStatus {
   switch (status) {
@@ -142,158 +94,69 @@ export default function NewViewPage() {
 
 function IssuesView() {
   const ctx = useNewView()
-  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set())
 
-  const [issues] = usePowerSyncQuery<IssueRow>(
-    () => `
-      SELECT
-        i.id,
-        i.title,
-        i.priority,
-        i.due_date,
-        i.number,
-        t.identifier as team_identifier,
-        ws.id as status_id,
-        ws.name as status_name,
-        ws.category as status_category,
-        ws.color as status_color
-      FROM issue i
-      LEFT JOIN team t ON i.team_id = t.id
-      LEFT JOIN workflow_status ws ON i.status_id = ws.id
-      ORDER BY ws.position ASC, i.sort_order ASC, i.created_at DESC
-    `,
+  const [issues] = usePowerSyncQuery<SharedIssueRow>(
+    () => `SELECT ${ISSUE_FIELDS} ORDER BY i.sort_order ASC, i.created_at DESC`,
     () => []
   )
 
-  const groupedIssues = (): StatusGroup[] => {
-    const map = new Map<string, StatusGroup>()
+  const listGroups = createMemo((): BoardColumn[] => {
+    const map = new Map<string, SharedIssueRow[]>()
+    for (const cat of Object.keys(STATUS_DISPLAY_ORDER)) map.set(cat, [])
     for (const issue of issues()) {
-      const key = issue.status_id ?? "__none__"
-      if (!map.has(key)) {
-        map.set(key, {
-          id: key,
-          name: issue.status_name ?? "No Status",
-          category: issue.status_category ?? "backlog",
-          color: issue.status_color ?? "#6b7280",
-          issues: [],
-        })
-      }
-      map.get(key)!.issues.push(issue)
+      const cat = issue.status_category ?? "backlog"
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(issue)
     }
-    return Array.from(map.values())
-  }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (STATUS_DISPLAY_ORDER[a] ?? 99) - (STATUS_DISPLAY_ORDER[b] ?? 99))
+      .map(([category, items]) => ({
+        id: category,
+        name: statusLabel(category),
+        category,
+        color: null,
+        issues: items,
+      }))
+  })
 
-  const toggleGroup = (id: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const boardColumns = createMemo((): BoardColumn[] => {
+    const map = new Map<string, SharedIssueRow[]>()
+    for (const cat of Object.keys(BOARD_COLUMN_ORDER)) map.set(cat, [])
+    for (const issue of issues()) {
+      const cat = issue.status_category ?? "backlog"
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(issue)
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (BOARD_COLUMN_ORDER[a] ?? 99) - (BOARD_COLUMN_ORDER[b] ?? 99))
+      .map(([category, items]) => ({
+        id: category,
+        name: statusLabel(category),
+        category,
+        color: null,
+        issues: items,
+      }))
+  })
 
   return (
-    <div class="flex-1 overflow-y-auto px-2 mt-2">
-      <For each={groupedIssues()}>
-        {(group) => (
-          <GroupSection
-            group={group}
+    <div class="flex-1 overflow-hidden">
+      <SolidSwitch>
+        <Match when={ctx.displayView() === "list"}>
+          <ListView
+            groups={listGroups()}
             workspaceSlug={ctx.workspaceSlug()}
-            collapsed={collapsedGroups().has(group.id)}
-            onToggle={() => toggleGroup(group.id)}
+            showEmptyGroups={ctx.showEmptyGroups()}
           />
-        )}
-      </For>
-    </div>
-  )
-}
-
-function GroupSection(props: {
-  group: StatusGroup
-  workspaceSlug: string
-  collapsed: boolean
-  onToggle: () => void
-}) {
-  const category = () => mapStatusCategory(props.group.category)
-
-  return (
-    <div>
-      {/* Group header */}
-      <div class="group/header sticky top-0 z-10 flex items-center gap-2 border-b border-border/20 bg-card/95 px-4 py-1.5 backdrop-blur-sm rounded-lg">
-        <button
-          type="button"
-          onClick={props.onToggle}
-          class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-        >
-          <ChevronDownIcon
-            class={`size-3 transition-transform ${props.collapsed ? "-rotate-90" : ""}`}
+        </Match>
+        <Match when={ctx.displayView() === "board"}>
+          <BoardView
+            columns={boardColumns()}
+            workspaceSlug={ctx.workspaceSlug()}
+            showEmptyColumns={ctx.showEmptyColumns()}
           />
-        </button>
-
-        <StatusIcon category={category()} color={props.group.color} class="size-3.5 shrink-0" />
-
-        <span class="text-[13px] font-medium text-foreground">{props.group.name}</span>
-        <span class="text-[12px] text-muted-foreground/60">{props.group.issues.length}</span>
-
-        <button
-          type="button"
-          class="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-all hover:bg-white/5 hover:text-muted-foreground group-hover/header:opacity-100"
-        >
-          <PlusIcon class="size-3" />
-        </button>
-      </div>
-
-      {/* Issues */}
-      <Show when={!props.collapsed}>
-        <For each={props.group.issues}>
-          {(issue) => <IssueItem issue={issue} workspaceSlug={props.workspaceSlug} />}
-        </For>
-      </Show>
+        </Match>
+      </SolidSwitch>
     </div>
-  )
-}
-
-function IssueItem(props: { issue: IssueRow; workspaceSlug: string }) {
-  const priority = () => mapPriority(props.issue.priority)
-  const category = () => mapStatusCategory(props.issue.status_category)
-  const issueId = () => `${props.issue.team_identifier}-${props.issue.number}`
-  const href = () => `/${props.workspaceSlug}/issue/${issueId()}/${slugify(props.issue.title)}`
-  const date = () => formatDate(props.issue.due_date ?? props.issue.id)
-
-  return (
-    <a
-      href={href()}
-      class="group/row flex items-center gap-2 border-b border-border/10 px-4 py-2 transition-colors hover:bg-white/5 last:border-b-0 rounded-lg"
-    >
-      {/* Drag handle */}
-      <span class="shrink-0 cursor-grab text-muted-foreground/20 transition-opacity group-hover/row:text-muted-foreground/40">
-        <DragHandleIcon class="size-3" />
-      </span>
-
-      {/* Issue ID */}
-      <span class="w-14 shrink-0 font-mono text-[12px] text-muted-foreground/60">{issueId()}</span>
-
-      {/* Status circle */}
-      <StatusIcon
-        category={category()}
-        color={props.issue.status_color}
-        class="size-3.5 shrink-0"
-      />
-
-      {/* Title */}
-      <span class="flex-1 truncate text-[13px] text-foreground">{props.issue.title}</span>
-
-      {/* Priority */}
-      <PriorityIcon value={priority()} class="size-3.5 shrink-0 text-muted-foreground/60" />
-
-      {/* Assignee avatar placeholder */}
-      <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted/60 text-muted-foreground/60">
-        <PersonIcon class="size-2.5" />
-      </span>
-
-      {/* Date */}
-      <span class="w-12 shrink-0 text-right text-[12px] text-muted-foreground/60">{date()}</span>
-    </a>
   )
 }
 
@@ -448,41 +311,6 @@ function ProjectItem(props: { project: ProjectRow; workspaceSlug: string }) {
 // ---------------------------------------------------------------------------
 // Icons
 // ---------------------------------------------------------------------------
-
-function ChevronDownIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  )
-}
-
-function PlusIcon(props: { class?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-    >
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
 
 function DragHandleIcon(props: { class?: string }) {
   return (
